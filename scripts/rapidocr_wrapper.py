@@ -63,7 +63,7 @@ _model_version = None
 def detect_model_version():
     """
     自动检测模型版本
-    优先检测V5，如果没有则使用V4
+    优先检测V6，其次V5，最后使用V4
     """
     global _model_version
     
@@ -72,6 +72,16 @@ def detect_model_version():
     
     if _model_version:
         return _model_version
+    
+    # 检测V6模型
+    v6_files = [
+        MODEL_DIR / "ch_PP-OCRv6_medium_det_infer.onnx",
+        MODEL_DIR / "ch_PP-OCRv6_medium_rec_infer.onnx",
+    ]
+    
+    if all(f.exists() for f in v6_files):
+        _model_version = "v6"
+        return "v6"
     
     # 检测V5模型
     v5_files = [
@@ -102,7 +112,7 @@ def get_model_paths(version=None):
     获取模型路径
     
     Args:
-        version: 'v4' 或 'v5'，None则自动检测
+        version: 'v4', 'v5' 或 'v6'，None则自动检测
         
     Returns:
         dict: 包含 det/rec/cls 模型路径的字典
@@ -110,7 +120,14 @@ def get_model_paths(version=None):
     if version is None:
         version = detect_model_version()
     
-    if version == "v5":
+    if version == "v6":
+        return {
+            "det": MODEL_DIR / "ch_PP-OCRv6_medium_det_infer.onnx",
+            "rec": MODEL_DIR / "ch_PP-OCRv6_medium_rec_infer.onnx",
+            "cls": MODEL_DIR / "ch_ppocr_mobile_v2.0_cls_infer.onnx",
+            "dict": None,  # V6字典已嵌入模型
+        }
+    elif version == "v5":
         return {
             "det": MODEL_DIR / "ch_PP-OCRv5_mobile_det_infer.onnx",
             "rec": MODEL_DIR / "ch_PP-OCRv5_mobile_rec_infer.onnx",

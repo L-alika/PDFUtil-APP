@@ -169,17 +169,20 @@ public class DesktopApiController extends BaseController {
             // 创建转换记录 - 优先使用前端指定的输出目录
             String baseOutputDir = StringUtils.isNotEmpty(customOutputDir) ? customOutputDir : getOutputDir();
 
+            // 使用原始文件名作为命名依据，避免 UUID 临时前缀进入输出文件名和目录名
+            String namingSourcePath = uploadDir + File.separator + fileName;
+
             // 对于规则1和规则2，不使用buildOutputDir预先构建路径
             // 这些规则需要根据源文件的父目录路径结构来构建档号，由convertToDirectory方法处理
             // 对于其他规则（0, 3-7），使用PdfOutputPathBuilder构建输出路径
             String actualOutputDir;
             if (folderCreateRule == 1 || folderCreateRule == 2) {
-                // 规则1和2：直接使用基础输出目录，让convertToDirectory处理档号构建
+                // 规则1 and 2：直接使用基础输出目录，让convertToDirectory处理档号构建
                 actualOutputDir = baseOutputDir;
             } else {
                 // 其他规则：使用PdfOutputPathBuilder构建输出路径
                 actualOutputDir = PdfOutputPathBuilder.buildOutputDir(
-                        baseOutputDir, sourcePath, folderCreateRule, (String) null);
+                        baseOutputDir, namingSourcePath, folderCreateRule, (String) null);
             }
 
             // 确保输出目录存在
@@ -189,7 +192,7 @@ public class DesktopApiController extends BaseController {
             }
 
             // 使用PdfOutputPathBuilder获取PDF文件名（传入输出目录路径）
-            String pdfBaseName = PdfOutputPathBuilder.getPdfBaseName(actualOutputDir, sourcePath, pdfNameSource);
+            String pdfBaseName = PdfOutputPathBuilder.getPdfBaseName(actualOutputDir, namingSourcePath, pdfNameSource);
 
             // 应用前缀和后缀
             StringBuilder targetFileNameBuilder = new StringBuilder();
