@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>格式转换工具 - 启动中</title>
+    <script src="./assets/js/tailwind.min.js"></script>
+    <link rel="stylesheet" href="./assets/fonts.css"/>
+    <script id="tailwind-config">
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#dc2626",
+                        "primary-hover": "#b91c1c",
+                        "background": "#fafafa",
+                        "surface": "#ffffff",
+                        "border": "#e5e7eb",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "PingFang SC", "Microsoft YaHei", "sans-serif"]
+                    },
+                },
+            },
+        }
+    </script>
+    <style>
+        body {
+            font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+        /* Spinner Animation */
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+        /* Progress Bar Animation */
+        @keyframes progress {
+            0% { width: 0%; }
+            50% { width: 70%; }
+            100% { width: 100%; }
+        }
+        .progress-bar {
+            animation: progress 2s ease-in-out infinite;
+        }
+        /* Fade In Animation */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-background min-h-screen flex items-center justify-center">
+    <div class="text-center fade-in">
+        <!-- Logo & Spinner -->
+        <div class="relative w-20 h-20 mx-auto mb-6">
+            <!-- Outer Ring -->
+            <div class="absolute inset-0 rounded-full border-4 border-red-100"></div>
+            <!-- Spinning Ring -->
+            <div class="spinner absolute inset-0 rounded-full border-4 border-transparent border-t-primary"></div>
+            <!-- Center Icon -->
+            <div class="absolute inset-2 bg-surface rounded-full flex items-center justify-center shadow-sm overflow-hidden">
+                <img src="../assets/icon.svg" alt="Logo" class="w-full h-full object-contain p-1">
+            </div>
+        </div>
+
+        <!-- App Name -->
+        <h1 class="text-2xl font-bold text-slate-900 mb-2">格式转换工具</h1>
+        <p class="text-sm text-slate-500 mb-8">正在启动服务...</p>
+
+        <!-- Progress Bar -->
+        <div class="w-64 h-1 bg-slate-200 rounded-full overflow-hidden mx-auto">
+            <div class="progress-bar h-full bg-primary rounded-full"></div>
+        </div>
+
+        <!-- Version Info -->
+        <p class="text-xs text-slate-400 mt-6">版本 3.2.1</p>
+    </div>
+</body>
+</html>

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>设备授权 - 格式转换工具</title>
+    <script src="./assets/js/tailwind.min.js"></script>
+    <link rel="stylesheet" href="./assets/fonts.css"/>
+    <script id="tailwind-config">
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#dc2626",
+                        "primary-hover": "#b91c1c",
+                        "background": "#fafafa",
+                        "surface": "#ffffff",
+                        "border": "#e5e7eb",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "PingFang SC", "Microsoft YaHei", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "0.75rem", "xl": "1rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+        .key-input {
+            letter-spacing: 0.05em;
+        }
+    </style>
+</head>
+<body class="bg-background text-slate-800 min-h-screen flex items-center justify-center p-4 overflow-hidden">
+    <div class="w-full max-w-lg">
+        <!-- Authorization Card -->
+        <div class="bg-surface rounded-2xl border border-border p-6 shadow-xl">
+            <!-- Header -->
+<!--            <div class="text-center mb-8">-->
+<!--                <div class="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4">-->
+<!--                    <span class="material-symbols-outlined text-3xl text-primary">vpn_key</span>-->
+<!--                </div>-->
+<!--                <h2 class="text-2xl font-bold mb-2 text-slate-900">设备授权</h2>-->
+<!--                <p class="text-slate-500">请完成授权验证以继续使用</p>-->
+<!--            </div>-->
+
+            <!-- Step 1: Device Info -->
+            <div class="bg-slate-50 rounded-xl p-4 mb-4">
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold">1</span>
+                    <h3 class="font-semibold text-slate-900 text-sm">获取设备信息</h3>
+                </div>
+
+                <div class="space-y-2">
+                    <div>
+                        <label class="text-xs text-slate-500 uppercase tracking-wider">设备名称</label>
+                        <p class="text-sm font-medium text-slate-700 mt-0.5" id="deviceName">正在获取...</p>
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-500 uppercase tracking-wider">MAC 地址</label>
+                        <div class="flex items-center gap-2 mt-0.5">
+                            <code class="text-sm font-mono font-medium text-slate-700 bg-white px-3 py-1.5 rounded-lg border border-border flex-1 text-center" id="macAddress">获取中...</code>
+                            <button class="p-1.5 bg-white border border-border rounded-lg hover:border-primary hover:text-primary transition-colors" title="复制" onclick="copyMac()">
+                                <span class="material-symbols-outlined text-sm" id="copyIcon">content_copy</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-3 p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div class="flex items-start gap-2">
+                        <span class="material-symbols-outlined text-amber-600 text-xs mt-0.5">info</span>
+                        <p class="text-xs text-amber-700 leading-relaxed">
+                            请将上方 MAC 地址发送给管理员，管理员将为您生成授权密钥。
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: Enter Key -->
+            <div>
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold">2</span>
+                    <h3 class="font-semibold text-slate-900 text-sm">输入授权密钥</h3>
+                </div>
+
+                <form class="space-y-3" onsubmit="return false;">
+                    <div>
+                        <div class="relative">
+                            <textarea id="licenseCode" rows="3" placeholder="请将授权码完整粘贴到此处"
+                                class="key-input w-full px-4 py-2.5 rounded-xl border border-border bg-slate-50 focus:ring-2 focus:ring-red-100 focus:border-primary outline-none transition-all text-sm text-center font-mono resize-none"></textarea>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1.5 text-center">请完整复制粘贴，不要修改大小写 <span id="codeLength" class="text-slate-300"></span></p>
+                    </div>
+
+                    <!-- Verify Button -->
+                    <button type="button" id="activateBtn" onclick="activateDevice()"
+                        class="w-full bg-primary hover:bg-primary-hover text-white font-semibold py-2.5 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-200">
+                        <span class="material-symbols-outlined text-base" id="btnIcon">verified</span>
+                        <span id="btnText">验证并激活</span>
+                    </button>
+
+                    <!-- Exit Button -->
+                    <button type="button" onclick="exitApp()"
+                        class="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium py-2.5 rounded-xl transition-all flex items-center justify-center gap-2">
+                        <span class="material-symbols-outlined text-base">logout</span>
+                        <span>退出程序</span>
+                    </button>
+                </form>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Success Modal (Hidden by default) -->
+    <div class="fixed inset-0 bg-black/50 flex items-center justify-center hidden" id="successModal">
+        <div class="bg-surface rounded-2xl p-8 max-w-sm mx-4 text-center">
+            <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="material-symbols-outlined text-4xl text-green-600">check_circle</span>
+            </div>
+            <h3 class="text-xl font-bold text-slate-900 mb-2">授权成功</h3>
+            <p class="text-slate-500 mb-2">您的设备已成功授权</p>
+            <p class="text-xs text-slate-400 mb-6" id="successDetail"></p>
+            <div class="w-full bg-slate-100 rounded-full h-1.5">
+                <div class="bg-green-500 h-1.5 rounded-full animate-pulse" style="width: 100%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Toast (Hidden by default) -->
+    <div class="fixed top-6 left-1/2 -translate-x-1/2 bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-2 hidden shadow-lg" id="errorToast">
+        <span class="material-symbols-outlined text-red-500">error</span>
+        <span class="text-sm text-red-700" id="errorText">授权密钥无效，请检查后重试</span>
+    </div>
+
+    <script>
+        // 加载时获取MAC地址和设备信息
+        window.onload = async function() {
+            console.log('授权页面加载完成，开始获取MAC地址...');
+
+            // 设置设备名称
+            document.getElementById('deviceName').textContent = navigator.platform || 'Windows PC';
+
+            try {
+                const API_BASE = 'http://localhost:8139';
+                console.log('正在请求 ' + API_BASE + '/api/license/mac-addresses ...');
+                const response = await fetch(API_BASE + '/api/license/mac-addresses');
+                console.log('响应状态:', response.status);
+
+                const result = await response.json();
+                console.log('响应数据:', result);
+
+                // PDFUtil框架：code 0 表示成功
+                if ((result.code === 0 || result.code === 200) && result.data) {
+                    const primaryMac = result.data.primaryMac || '未知';
+                    console.log('获取到MAC地址:', primaryMac);
+                    document.getElementById('macAddress').textContent = primaryMac;
+                } else {
+                    console.error('获取MAC地址失败, code:', result.code, 'msg:', result.msg);
+                    document.getElementById('macAddress').textContent = '获取失败';
+                }
+            } catch (error) {
+                console.error('获取MAC地址异常:', error);
+                console.error('错误详情:', error.message);
+                document.getElementById('macAddress').textContent = '获取失败';
+            }
+        };
+
+        // 复制MAC地址
+        function copyMac() {
+            const macText = document.getElementById('macAddress').textContent;
+            navigator.clipboard.writeText(macText).then(() => {
+                const icon = document.getElementById('copyIcon');
+                icon.textContent = 'check';
+                icon.classList.add('text-green-600');
+                setTimeout(() => {
+                    icon.textContent = 'content_copy';
+                    icon.classList.remove('text-green-600');
+                }, 2000);
+            }).catch(() => {
+                // 降级方案
+                const input = document.createElement('input');
+                input.value = macText;
+                document.body.appendChild(input);
+                input.select();
+                document.execCommand('copy');
+                document.body.removeChild(input);
+            });
+        }
+
+        // 清理授权码输入 - 移除所有空白字符（包括空格、换行、回车、制表符），保留Base64所有字符
+        function cleanLicenseCode(value) {
+            // 替换所有空白字符：空格、制表符、换行符、回车符等
+            return value.replace(/[\s\r\n]+/g, '').trim();
+        }
+
+        // 更新长度显示
+        function updateLength() {
+            const code = cleanLicenseCode(document.getElementById('licenseCode').value);
+            document.getElementById('codeLength').textContent = code.length > 0 ? `(${code.length} 字符)` : '';
+        }
+
+        // 输入时更新长度
+        document.getElementById('licenseCode').addEventListener('input', updateLength);
+
+        // 失去焦点时清理
+        document.getElementById('licenseCode').addEventListener('blur', function(e) {
+            e.target.value = cleanLicenseCode(e.target.value);
+            updateLength();
+        });
+
+        // 粘贴时自动清理
+        document.getElementById('licenseCode').addEventListener('paste', function(e) {
+            setTimeout(() => {
+                e.target.value = cleanLicenseCode(e.target.value);
+                updateLength();
+            }, 0);
+        });
+
+        // 显示错误提示
+        function showError(message) {
+            const toast = document.getElementById('errorToast');
+            document.getElementById('errorText').textContent = message;
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 4000);
+        }
+
+        // 激活设备
+        async function activateDevice() {
+            // 获取授权码并清理
+            const licenseCode = cleanLicenseCode(document.getElementById('licenseCode').value);
+            console.log('清理后授权码:', licenseCode);
+
+            console.log('授权码长度:', licenseCode.length);
+            console.log('授权码内容:', licenseCode);
+
+            if (!licenseCode || licenseCode.length < 50) {
+                showError('授权码不完整，请确保完整复制（通常约100+字符）');
+                return;
+            }
+
+            const btn = document.getElementById('activateBtn');
+            const btnIcon = document.getElementById('btnIcon');
+            const btnText = document.getElementById('btnText');
+
+            btn.disabled = true;
+            btn.classList.add('opacity-70', 'cursor-not-allowed');
+            btnIcon.textContent = 'refresh';
+            btnIcon.classList.add('animate-spin');
+            btnText.textContent = '验证中...';
+
+            try {
+                const API_BASE = 'http://localhost:8139';
+                const response = await fetch(API_BASE + '/api/license/activate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ licenseCode: licenseCode })
+                });
+
+                const result = await response.json();
+
+                // PDFUtil框架：code 0 表示成功
+                if (result.code === 0 || result.code === 200) {
+                    // 显示成功弹窗
+                    const modal = document.getElementById('successModal');
+                    const detail = document.getElementById('successDetail');
+                    if (result.data) {
+                        detail.textContent = `绑定MAC: ${result.data.macAddress || ''}`;
+                    }
+                    modal.classList.remove('hidden');
+
+                    // 通知主进程授权成功
+                    setTimeout(() => {
+                        if (window.electronAPI) {
+                            window.electronAPI.sendLicenseValidated();
+                        }
+                    }, 2000);
+                } else {
+                    showError(result.msg || '授权密钥无效，请检查后重试');
+                    resetButton();
+                }
+
+            } catch (error) {
+                console.error('激活失败:', error);
+                showError('网络错误，请稍后重试');
+                resetButton();
+            }
+        }
+
+        // 重置按钮状态
+        function resetButton() {
+            const btn = document.getElementById('activateBtn');
+            const btnIcon = document.getElementById('btnIcon');
+            const btnText = document.getElementById('btnText');
+
+            btn.disabled = false;
+            btn.classList.remove('opacity-70', 'cursor-not-allowed');
+            btnIcon.textContent = 'verified';
+            btnIcon.classList.remove('animate-spin');
+            btnText.textContent = '验证并激活';
+        }
+
+        // 退出应用
+        function exitApp() {
+            if (window.electronAPI) {
+                window.electronAPI.exitApp();
+            } else {
+                window.close();
+            }
+        }
+    </script>
+</body>
+</html>

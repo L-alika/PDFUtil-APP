@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>登录 - 格式转换工具</title>
+    <script src="./assets/js/tailwind.min.js"></script>
+    <link rel="stylesheet" href="./assets/fonts.css"/>
+    <script id="tailwind-config">
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#dc2626",
+                        "primary-hover": "#b91c1c",
+                        "background": "#fafafa",
+                        "surface": "#ffffff",
+                        "border": "#e5e7eb",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "PingFang SC", "Microsoft YaHei", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "0.75rem", "xl": "1rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+        /* 禁用文本选择 */
+        .no-select {
+            -webkit-user-select: none;
+            user-select: none;
+        }
+    </style>
+</head>
+<body class="bg-background text-slate-800 min-h-screen flex items-center justify-center p-8 no-select">
+    <div class="w-full max-w-md">
+        <!-- Logo -->
+        <div class="flex items-center justify-center gap-3 mb-8">
+            <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center overflow-hidden">
+                <img src="../assets/icon.svg" alt="Logo" class="w-full h-full object-contain p-1">
+            </div>
+            <div>
+                <h1 class="font-bold text-2xl leading-tight text-slate-900">格式转换工具</h1>
+            </div>
+        </div>
+
+        <!-- Login Card -->
+        <div class="bg-surface rounded-2xl border border-border p-8 shadow-xl">
+            <div class="text-center mb-8">
+                <div class="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <span class="material-symbols-outlined text-3xl text-primary">lock_person</span>
+                </div>
+                <h2 class="text-2xl font-bold mb-2 text-slate-900">欢迎回来</h2>
+                <p class="text-slate-500">请登录您的账号以继续使用</p>
+            </div>
+
+            <form id="loginForm" class="space-y-5">
+                <!-- Username -->
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">用户名</label>
+                    <div class="relative">
+                        <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">person</span>
+                        <input id="username" type="text" placeholder="请输入用户名"
+                            class="w-full pl-11 pr-4 py-3 rounded-xl border border-border bg-slate-50 focus:ring-2 focus:ring-red-100 focus:border-primary outline-none transition-all text-sm"/>
+                    </div>
+                </div>
+
+                <!-- Password -->
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">密码</label>
+                    <div class="relative">
+                        <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">lock</span>
+                        <input id="password" type="password" placeholder="请输入密码"
+                            class="w-full pl-11 pr-11 py-3 rounded-xl border border-border bg-slate-50 focus:ring-2 focus:ring-red-100 focus:border-primary outline-none transition-all text-sm"/>
+                        <button type="button" id="togglePassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                            <span class="material-symbols-outlined text-lg">visibility_off</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Remember Me -->
+                <div class="flex items-center justify-between">
+                    <label class="flex items-center gap-2 cursor-pointer select-none">
+                        <input id="rememberMe" type="checkbox" class="w-4 h-4 rounded text-primary border-slate-300 focus:ring-red-200 focus:ring-offset-0 cursor-pointer"/>
+                        <span class="text-sm font-medium text-slate-600">记住我</span>
+                    </label>
+                </div>
+
+                <!-- Error Message -->
+                <div id="errorMessage" class="hidden text-red-500 text-sm text-center"></div>
+
+                <!-- Login Button -->
+                <button type="submit" id="loginBtn" class="w-full bg-primary hover:bg-primary-hover text-white font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-200">
+                    <span>登录</span>
+                    <span class="material-symbols-outlined text-lg">arrow_forward</span>
+                </button>
+            </form>
+
+            <div class="mt-6 text-center">
+                <p class="text-sm text-slate-500">
+                    还没有账号?
+                    <a href="#" id="contactAdmin" class="text-primary font-semibold hover:underline">联系管理员</a>
+                </p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // 页面加载时自动回填保存的账号密码
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (window.electronAPI) {
+                try {
+                    const saved = await window.electronAPI.getSavedCredentials();
+                    if (saved && saved.username && saved.password) {
+                        document.getElementById('username').value = saved.username;
+                        document.getElementById('password').value = saved.password;
+                        document.getElementById('rememberMe').checked = true;
+                    }
+                } catch (err) {
+                    console.error('加载保存的凭证失败:', err);
+                }
+            }
+        });
+
+        // 密码可见性切换
+        document.getElementById('togglePassword').addEventListener('click', function() {
+            const passwordInput = document.getElementById('password');
+            const icon = this.querySelector('.material-symbols-outlined');
+
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                icon.textContent = 'visibility';
+            } else {
+                passwordInput.type = 'password';
+                icon.textContent = 'visibility_off';
+            }
+        });
+
+        // 登录表单提交
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const rememberMe = document.getElementById('rememberMe').checked;
+            const errorMessage = document.getElementById('errorMessage');
+            const loginBtn = document.getElementById('loginBtn');
+
+            // 清空错误信息
+            errorMessage.classList.add('hidden');
+            errorMessage.textContent = '';
+
+            // 简单验证
+            if (!username || !password) {
+                errorMessage.textContent = '请输入用户名和密码';
+                errorMessage.classList.remove('hidden');
+                return;
+            }
+
+            // 禁用登录按钮
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = '<span class="material-symbols-outlined animate-spin">progress_activity</span><span>登录中...</span>';
+
+            try {
+                // 调用 Electron 主进程进行登录验证
+                if (window.electronAPI) {
+                    const result = await window.electronAPI.login({ username, password, rememberMe });
+
+                    if (result.success) {
+                        // 登录成功
+                        loginBtn.innerHTML = '<span class="material-symbols-outlined">check</span><span>登录成功</span>';
+                        loginBtn.classList.remove('bg-primary');
+                        loginBtn.classList.add('bg-green-500');
+                    } else {
+                        // 登录失败
+                        errorMessage.textContent = result.message || '用户名或密码错误';
+                        errorMessage.classList.remove('hidden');
+                        loginBtn.disabled = false;
+                        loginBtn.innerHTML = '<span>登录</span><span class="material-symbols-outlined text-lg">arrow_forward</span>';
+                    }
+                } else {
+                    // 开发测试模式：模拟登录成功
+                    console.log('开发模式：模拟登录', { username, password, rememberMe });
+                    setTimeout(() => {
+                        loginBtn.innerHTML = '<span class="material-symbols-outlined">check</span><span>登录成功</span>';
+                        loginBtn.classList.remove('bg-primary');
+                        loginBtn.classList.add('bg-green-500');
+
+                        // 通知主进程登录成功
+                        if (window.electronAPI) {
+                            window.electronAPI.login({ username, password, rememberMe });
+                        }
+                    }, 1000);
+                }
+            } catch (error) {
+                errorMessage.textContent = '登录失败：' + error.message;
+                errorMessage.classList.remove('hidden');
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = '<span>登录</span><span class="material-symbols-outlined text-lg">arrow_forward</span>';
+            }
+        });
+
+        // 输入框回车触发登录
+        document.getElementById('password').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+            }
+        });
+
+        // 联系管理员点击事件
+        document.getElementById('contactAdmin').addEventListener('click', function(e) {
+            e.preventDefault();
+            Toast.info('如需账号请联系软件供应商', 5000);
+        });
+
+        // ==================== 统一通知提示系统 ====================
+        const Toast = {
+            container: null,
+            maxToasts: 3,
+            toasts: [],
+
+            init() {
+                if (!this.container) {
+                    this.container = document.createElement('div');
+                    this.container.className = 'fixed top-20 right-6 z-50 flex flex-col gap-2 pointer-events-none';
+                    document.body.appendChild(this.container);
+                }
+            },
+
+            show(message, type = 'info', duration = 3000) {
+                this.init();
+
+                // 限制最大数量
+                if (this.toasts.length >= this.maxToasts) {
+                    const oldToast = this.toasts.shift();
+                    oldToast.remove();
+                }
+
+                const toast = document.createElement('div');
+                const styles = this.getStyles(type);
+
+                toast.className = `
+                    pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg
+                    transform transition-all duration-300 ease-out
+                    translate-x-full opacity-0
+                    ${styles.bg} ${styles.border} border
+                    min-w-[280px] max-w-[400px]
+                `;
+
+                toast.innerHTML = `
+                    <span class="material-symbols-outlined ${styles.iconColor}">${styles.icon}</span>
+                    <div class="flex-1">
+                        <p class="text-sm font-medium ${styles.textColor}">${message}</p>
+                    </div>
+                    <button class="opacity-60 hover:opacity-100 transition-opacity" onclick="Toast.dismiss(this.parentElement)">
+                        <span class="material-symbols-outlined text-sm ${styles.iconColor}">close</span>
+                    </button>
+                `;
+
+                this.container.appendChild(toast);
+                this.toasts.push(toast);
+
+                // 显示动画
+                requestAnimationFrame(() => {
+                    toast.classList.remove('translate-x-full', 'opacity-0');
+                });
+
+                // 自动隐藏
+                if (duration > 0) {
+                    setTimeout(() => {
+                        this.dismiss(toast);
+                    }, duration);
+                }
+
+                return toast;
+            },
+
+            dismiss(toast) {
+                if (!toast || toast.classList.contains('dismissing')) return;
+                toast.classList.add('dismissing');
+                toast.classList.add('translate-x-full', 'opacity-0');
+
+                setTimeout(() => {
+                    const index = this.toasts.indexOf(toast);
+                    if (index > -1) {
+                        this.toasts.splice(index, 1);
+                    }
+                    toast.remove();
+                }, 300);
+            },
+
+            getStyles(type) {
+                const styles = {
+                    success: {
+                        bg: 'bg-green-50',
+                        border: 'border-green-200',
+                        icon: 'check_circle',
+                        iconColor: 'text-green-600',
+                        textColor: 'text-green-800'
+                    },
+                    error: {
+                        bg: 'bg-red-50',
+                        border: 'border-red-200',
+                        icon: 'error',
+                        iconColor: 'text-red-600',
+                        textColor: 'text-red-800'
+                    },
+                    warning: {
+                        bg: 'bg-amber-50',
+                        border: 'border-amber-200',
+                        icon: 'warning',
+                        iconColor: 'text-amber-600',
+                        textColor: 'text-amber-800'
+                    },
+                    info: {
+                        bg: 'bg-blue-50',
+                        border: 'border-blue-200',
+                        icon: 'info',
+                        iconColor: 'text-blue-600',
+                        textColor: 'text-blue-800'
+                    }
+                };
+                return styles[type] || styles.info;
+            },
+
+            success(message, duration) { return this.show(message, 'success', duration); },
+            error(message, duration) { return this.show(message, 'error', duration); },
+            warning(message, duration) { return this.show(message, 'warning', duration); },
+            info(message, duration) { return this.show(message, 'info', duration); }
+        };
+    </script>
+</body>
+</html>

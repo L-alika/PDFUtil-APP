@@ -1,0 +1,86 @@
+{
+  "name": "pdfutil-desktop",
+  "version": "1.0.0",
+  "description": "格式转换工具桌面应用",
+  "main": "main.js",
+  "scripts": {
+    "start": "chcp 65001 >nul 2>&1 && electron .",
+    "build": "electron-builder",
+    "build:win": "npm run generate-icons && electron-builder --win --x64",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "generate-icons": "node scripts/generate-icon.js && node scripts/convert-to-ico.mjs"
+  },
+  "author": "Alika",
+  "license": "MIT",
+  "dependencies": {
+    "iconv-lite": "^0.7.2"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "electron-icon-builder": "^2.0.1",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5"
+  },
+  "build": {
+    "appId": "com.pdfutil.pdfutil",
+    "productName": "PDF-APP",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "assets/**/*",
+      "node_modules/iconv-lite/**/*",
+      "node_modules/safer-buffer/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../pdfutil-admin/target/pdfutil-admin.jar",
+        "to": "pdfutil-admin.jar"
+      },
+      {
+        "from": "../models",
+        "to": "models"
+      },
+      {
+        "from": "../scripts",
+        "to": "scripts"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "sign": null
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "格式转换工具",
+      "include": "installer.nsh"
+    }
+  }
+}
