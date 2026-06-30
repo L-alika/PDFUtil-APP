@@ -1,0 +1,58 @@
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+
+# 日志
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker - 排除其他dockerfile
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# 文档
+*.md
+README/
+docs/
+
+# 测试
+**/test/
+**/tests/
+
+# 上传文件
+upload/
+output/
+
+# 不需要的目录
+pdfutil/
+nacos/
+nginx/

@@ -1,0 +1,171 @@
+######################################################################
+# Build Tools - Maven/Gradle
+######################################################################
+
+.gradle
+/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+*.jar
+*.war
+*.ear
+*.class
+
+mvnw
+mvnw.cmd
+
+######################################################################
+# IDE - IntelliJ IDEA
+######################################################################
+.idea/
+electron-app/deploy-package
+electron-app
+models
+*.iws
+*.iml
+*.ipr
+out/
+######################################################################
+# IDE - Eclipse/STS
+######################################################################
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.metadata
+.recommenders
+
+######################################################################
+# IDE - VSCode
+######################################################################
+.vscode/
+*.code-workspace
+
+######################################################################
+# IDE - JRebel
+######################################################################
+rebel.xml
+
+######################################################################
+# IDE - NetBeans
+######################################################################
+nbproject/private/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+######################################################################
+# Logs
+######################################################################
+*.log
+*.log.*
+logs/
+log/
+
+######################################################################
+# Temporary Files
+######################################################################
+*.tmp
+*.temp
+*.swp
+*~
+.#*
+.DS_Store
+Thumbs.db
+ehcache.xml
+
+######################################################################
+# Upload & Output Directories (格式转换工具)
+######################################################################
+# 上传文件目录
+upload/
+uploadPath/
+profile/
+# 转换输出目录
+output/
+convert/
+temp/
+# 下载目录
+download/
+
+######################################################################
+# Database
+######################################################################
+*.sql.bak
+*.db
+*.sqlite
+
+######################################################################
+# Config & Sensitive Files
+######################################################################
+application-*.yml
+!application.yml
+application-*.properties
+!application.properties
+
+# 敏感配置文件包含密码/密钥等
+config/private/
+
+# Electron 运行时凭证与用户数据（含明文账号密码，不入库）
+electron-app/config/user-data.json
+electron-app/config/credentials.json
+*.secret
+*.key
+*.pem
+*.p12
+*.jks
+
+# 设备授权文件
+license.dat
+license/
+.pdfutil/license/
+
+######################################################################
+# Maven
+######################################################################
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+######################################################################
+# Others
+######################################################################
+*.xml.versionsBackup
+*.patch
+*.diff
+
+# 保留特定的构建文件
+!*/build/*.java
+!*/build/*.html
+!*/build/*.xml
+
+# Tesseract OCR 语言包（太大）
+*.traineddata
+tessdata/
+
+# PDF转换缓存
+.cache/
+*.cache
+node_modules/
+
+.claude/
+
+nul
+
+######################################################################
+# Electron 内嵌第三方安装包（JDK/LibreOffice/Python/Ghostscript 等，体积大且超 GitHub 100MB 限制）
+# 如需分发，请从各官方渠道单独下载放入 electron-app/embedded/
+######################################################################
+electron-app/embedded/

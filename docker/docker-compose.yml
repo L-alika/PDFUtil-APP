@@ -1,0 +1,81 @@
+# PDF 转换系统 Docker Compose 配置 - 离线部署版本
+version: '3.8'
+
+services:
+  # MySQL 数据库服务
+  pdfutil-mysql:
+    container_name: pdfutil-mysql
+    image: mysql:5.7
+    build:
+      context: ./mysql
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./mysql/conf:/etc/mysql/conf.d
+      - ./mysql/logs:/logs
+      - ./mysql/data:/var/lib/mysql
+    command: [
+          'mysqld',
+          '--innodb-buffer-pool-size=80M',
+          '--character-set-server=utf8mb4',
+          '--collation-server=utf8mb4_unicode_ci',
+          '--default-time-zone=+8:00',
+          '--lower-case-table-names=1'
+        ]
+    environment:
+      MYSQL_DATABASE: 'ry-vue'
+      MYSQL_ROOT_PASSWORD: pdfutil123456
+    networks:
+      - pdfutil-net
+
+  # Redis 缓存服务
+  pdfutil-redis:
+    container_name: pdfutil-redis
+    image: redis:6.2-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis/conf/redis.conf:/usr/local/etc/redis/redis.conf
+      - ./redis/data:/data
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - pdfutil-net
+
+  # PDF 转换系统主服务（包含完整OCR功能）
+  pdf-service:
+    container_name: pdf-service
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./upload:/opt/pdfutil/pdf/upload
+      - ./output:/opt/pdfutil/pdf/output
+      - ./logs:/opt/pdfutil/logs
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - LIBREOFFICE_PATH=/usr/bin/libreoffice
+      - JAVA_OPTS=-Xmx3g -Xms2g
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
+    depends_on:
+      - pdfutil-mysql
+      - pdfutil-redis
+    networks:
+      - pdfutil-net
+    restart: unless-stopped
+
+networks:
+  pdfutil-net:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  redis-data:
