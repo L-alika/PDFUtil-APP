@@ -21,9 +21,6 @@ mvnw.cmd
 # IDE - IntelliJ IDEA
 ######################################################################
 .idea/
-electron-app/deploy-package
-electron-app
-models
 *.iws
 *.iml
 *.ipr
