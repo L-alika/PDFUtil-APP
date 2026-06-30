@@ -1,0 +1,2 @@
+Application Version: ${pdfutil.version}
+Spring Boot Version: ${spring-boot.version}

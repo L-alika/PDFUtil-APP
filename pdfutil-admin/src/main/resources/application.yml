@@ -1,0 +1,89 @@
+# ===================================================
+# 格式转换工具 - 桌面应用配置（无数据库版本）
+# ===================================================
+
+# 禁用Shiro完整认证（使用简化版）
+shiro:
+  enabled: false
+
+pdfutil:
+  name: 格式转换工具
+  version: 1.0.0
+  copyrightYear: 2025
+  profile: ${user.home}/.pdfutil/upload
+  # PDF转换配置
+  pdf:
+    dataDir: ${user.home}/.pdfutil/data
+    uploadDir: ${PDF_UPLOAD_DIR:${user.home}/.pdfutil/upload}
+    outputDir: ${PDF_OUTPUT_DIR:${user.home}/.pdfutil/output}
+    # OCR引擎类型: rapid (推荐，高性能), paddle (旧版)
+    ocrType: ${OCR_TYPE:rapid}
+    # RapidOCR/PaddleOCR脚本路径
+    rapidOcrScriptPath: ${RAPIDOCR_SCRIPT:./scripts/rapidocr_wrapper.py}
+    rapidOcrServiceScriptPath: ${RAPIDOCR_SERVICE_SCRIPT:./scripts/rapidocr_service.py}
+    paddleOcrScriptPath: ${PADDLEOCR_SCRIPT:./scripts/paddleocr_wrapper.py}
+    # Python路径
+    pythonPath: ${PYTHON_PATH:python}
+    # 本地OCR配置
+    localOcrExecuteTimeout: ${LOCAL_OCR_EXECUTE_TIMEOUT:300000}
+    localOcrMaxConcurrent: ${LOCAL_OCR_MAX_CONCURRENT:4}
+    # 智能并发控制配置
+    largeImageThreshold: ${PADDLE_LARGE_IMAGE_THRESHOLD:12000000}
+    veryLargeImageThreshold: ${PADDLE_VERY_LARGE_IMAGE_THRESHOLD:24000000}
+    # OCR分批处理大小（每批处理的图片数量，默认20）
+    ocrBatchSize: ${OCR_BATCH_SIZE:20}
+    # OCRmyPDF配置
+    ocrmypdfPath: ${OCRMYPDF_PATH:python -m ocrmypdf}
+    ocrmypdfLanguage: chi_sim+chi_tra+eng
+    # LibreOffice配置（用于Office文档转换）
+    libreofficePath: ${LIBREOFFICE_PATH:libreoffice}
+
+# 服务配置
+server:
+  port: 8139
+  servlet:
+    context-path: /
+  tomcat:
+    uri-encoding: UTF-8
+    accept-count: 1000
+    threads:
+      max: 800
+      min-spare: 100
+
+# 日志配置
+logging:
+  config: classpath:logback-desktop.xml
+  file:
+    name: ${user.home}/.pdfutil/logs/pdfutil.log
+  charset:
+    console: UTF-8
+    file: UTF-8
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  level:
+    com.pdfutil: info
+    org.springframework: warn
+
+# Spring配置
+spring:
+  application:
+    name: pdfutil-desktop
+  thymeleaf:
+    enabled: false
+  jackson:
+    time-zone: GMT+8
+    date-format: yyyy-MM-dd HH:mm:ss
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+  profiles:
+    active: desktop
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+# Swagger配置
+swagger:
+  enabled: true
