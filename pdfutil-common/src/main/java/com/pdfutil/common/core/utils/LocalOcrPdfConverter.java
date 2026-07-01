@@ -315,9 +315,7 @@ public class LocalOcrPdfConverter {
             Class<?> imageClass = Class.forName("org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject");
 
             // 获取APPEND枚举常量
-            @SuppressWarnings("unchecked")
-            Class<? extends Enum> enumClass = (Class<? extends Enum>) appendModeClass;
-            Object appendEnum = Enum.valueOf(enumClass, "APPEND");
+            Object appendEnum = appendModeClass.getMethod("valueOf", String.class).invoke(null, "APPEND");
 
             // 创建PDF文档
             Object document = documentClass.getDeclaredConstructor().newInstance();

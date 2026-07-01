@@ -811,6 +811,7 @@ public class FileStatsService {
             Map<String, Object> stats = getDirectoryStatsRecursive(subdir.getAbsolutePath());
 
             // 图片纸张统计
+            @SuppressWarnings("unchecked")
             Map<String, Integer> imageStats = (Map<String, Integer>) stats.get("imageStats");
             if (imageStats == null) {
                 imageStats = new HashMap<>();
@@ -824,6 +825,7 @@ public class FileStatsService {
             subfolderData.put("imageOther", imageStats.getOrDefault("other", 0));
 
             // PDF纸张统计
+            @SuppressWarnings("unchecked")
             Map<String, Integer> pdfStats = (Map<String, Integer>) stats.get("pdfStats");
             if (pdfStats == null) {
                 pdfStats = new HashMap<>();
@@ -837,6 +839,7 @@ public class FileStatsService {
             subfolderData.put("pdfOther", pdfStats.getOrDefault("other", 0));
 
             // OFD纸张统计
+            @SuppressWarnings("unchecked")
             Map<String, Integer> ofdStats = (Map<String, Integer>) stats.get("ofdStats");
             if (ofdStats == null) {
                 ofdStats = new HashMap<>();

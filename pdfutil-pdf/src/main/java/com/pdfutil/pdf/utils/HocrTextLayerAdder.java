@@ -8,6 +8,8 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDFontDescriptor;
+import org.apache.pdfbox.pdmodel.graphics.color.PDColor;
+import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.pdmodel.graphics.state.RenderingMode;
 import org.slf4j.Logger;
@@ -689,7 +691,7 @@ public class HocrTextLayerAdder {
 
                 contentStream.setFont(font, 12);
                 // 设置文本为白色（不可见）
-                contentStream.setNonStrokingColor(1, 1, 1);
+                contentStream.setNonStrokingColor(new PDColor(new float[]{1f / 255f, 1f / 255f, 1f / 255f}, PDDeviceRGB.INSTANCE));
 
                 // 添加每个文本块
                 for (TextBlock block : textBlocks) {
@@ -741,7 +743,7 @@ public class HocrTextLayerAdder {
 
                 contentStream.setFont(font, 12);
                 // 设置文本为透明（白色，完全不透明但与背景同色）
-                contentStream.setNonStrokingColor(1, 1, 1);
+                contentStream.setNonStrokingColor(new PDColor(new float[]{1f / 255f, 1f / 255f, 1f / 255f}, PDDeviceRGB.INSTANCE));
 
                 // 添加每个文本块
                 for (TextBlock block : textBlocks) {

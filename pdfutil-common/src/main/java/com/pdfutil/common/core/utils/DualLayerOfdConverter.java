@@ -545,6 +545,7 @@ public class DualLayerOfdConverter {
 
         try {
             // 使用并发工具分批处理
+            @SuppressWarnings("unchecked")
             java.util.concurrent.CompletableFuture<com.fasterxml.jackson.databind.JsonNode>[] futures =
                 new java.util.concurrent.CompletableFuture[batchCount];
 
@@ -706,6 +707,7 @@ public class DualLayerOfdConverter {
                     itemNode.put("confidence", (Double) item.get("confidence"));
 
                     com.fasterxml.jackson.databind.node.ArrayNode regionArray = mapper.createArrayNode();
+                    @SuppressWarnings("unchecked")
                     List<List<Integer>> region = (List<List<Integer>>) item.get("text_region");
                     for (List<Integer> pt : region) {
                         com.fasterxml.jackson.databind.node.ArrayNode ptArray = mapper.createArrayNode();
