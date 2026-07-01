@@ -691,7 +691,7 @@ public class HocrTextLayerAdder {
 
                 contentStream.setFont(font, 12);
                 // 设置文本为白色（不可见）
-                contentStream.setNonStrokingColor(new PDColor(new float[]{1f / 255f, 1f / 255f, 1f / 255f}, PDDeviceRGB.INSTANCE));
+                contentStream.setNonStrokingColor(new PDColor(new float[]{1f, 1f, 1f}, PDDeviceRGB.INSTANCE));
 
                 // 添加每个文本块
                 for (TextBlock block : textBlocks) {
@@ -743,7 +743,7 @@ public class HocrTextLayerAdder {
 
                 contentStream.setFont(font, 12);
                 // 设置文本为透明（白色，完全不透明但与背景同色）
-                contentStream.setNonStrokingColor(new PDColor(new float[]{1f / 255f, 1f / 255f, 1f / 255f}, PDDeviceRGB.INSTANCE));
+                contentStream.setNonStrokingColor(new PDColor(new float[]{1f, 1f, 1f}, PDDeviceRGB.INSTANCE));
 
                 // 添加每个文本块
                 for (TextBlock block : textBlocks) {
