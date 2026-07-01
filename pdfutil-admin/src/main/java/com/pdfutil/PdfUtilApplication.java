@@ -17,8 +17,7 @@ import org.springframework.core.env.Environment;
     scanBasePackages = {
         "com.pdfutil.pdf",              // PDF转换模块（核心功能）
         "com.pdfutil.common",           // 公共工具
-        "com.pdfutil.framework.config", // 框架配置
-        "com.pdfutil.web.controller.desktop" // 桌面版控制器
+        "com.pdfutil.framework.config"  // 框架配置
     }
 )
 public class PdfUtilApplication {
@@ -75,6 +74,14 @@ public class PdfUtilApplication {
         String ocrmypdfPath = env.getProperty("pdfutil.pdf.ocrmypdfPath", "python -m ocrmypdf");
         String ocrmypdfLanguage = env.getProperty("pdfutil.pdf.ocrmypdfLanguage", "chi_sim+chi_tra+eng");
 
+        // DPI配置 (支持从 pdfutil.pdf 和 pdf 前缀读取)
+        boolean adaptiveDpi = env.getProperty("pdfutil.pdf.adaptiveDpi", Boolean.class, 
+                              env.getProperty("pdf.adaptive-dpi", Boolean.class, true));
+        int extractDpi = env.getProperty("pdfutil.pdf.extractDpi", Integer.class, 
+                         env.getProperty("pdf.extract-dpi", Integer.class, 200));
+        float imageForceDpi = env.getProperty("pdfutil.pdf.imageForceDpi", Float.class, 
+                              env.getProperty("pdf.image-force-dpi", Float.class, 200.0f));
+
         // 设置系统属性
         System.setProperty("ocr.type", ocrType);
         System.setProperty("ocr.engine", ocrType);
@@ -85,6 +92,11 @@ public class PdfUtilApplication {
         System.setProperty("python.path", pythonPath);
         System.setProperty("ocrmypdf.path", ocrmypdfPath);
         System.setProperty("ocr.language", ocrmypdfLanguage);
+
+        // 设置DPI系统属性
+        System.setProperty("pdf.adaptive.dpi", String.valueOf(adaptiveDpi));
+        System.setProperty("pdf.extract.dpi", String.valueOf(extractDpi));
+        System.setProperty("image.force.dpi", String.valueOf(imageForceDpi));
 
         // 设置OCR引擎类型标志（确保与线程池配置一致）
         if ("rapid".equalsIgnoreCase(ocrType)) {
@@ -129,6 +141,9 @@ public class PdfUtilApplication {
         }
         System.out.println("执行超时      : " + localOcrExecuteTimeout + " ms");
         System.out.println("最大并发      : " + localOcrMaxConcurrent);
+        System.out.println("自适应DPI     : " + (adaptiveDpi ? "启用" : "禁用"));
+        System.out.println("PDF提取DPI    : " + extractDpi + " DPI");
+        System.out.println("强制图片DPI   : " + imageForceDpi + " DPI");
         System.out.println("==============================================");
         System.out.println();
     }

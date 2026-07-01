@@ -16,6 +16,10 @@ pdfutil:
     dataDir: ${user.home}/.pdfutil/data
     uploadDir: ${PDF_UPLOAD_DIR:${user.home}/.pdfutil/upload}
     outputDir: ${PDF_OUTPUT_DIR:${user.home}/.pdfutil/output}
+    # DPI配置 (统一DPI设置)
+    adaptiveDpi: false
+    extractDpi: 200
+    imageForceDpi: 200
     # OCR引擎类型: rapid (推荐，高性能), paddle (旧版)
     ocrType: ${OCR_TYPE:rapid}
     # RapidOCR/PaddleOCR脚本路径
