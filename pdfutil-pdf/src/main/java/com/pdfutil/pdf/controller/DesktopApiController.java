@@ -66,6 +66,14 @@ public class DesktopApiController extends BaseController {
     private static final int ARCHIVE_PREVIEW_DPI = 300;
     private static final int ARCHIVE_OCR_CACHE_MAX_SIZE = 32;
     private static final int ARCHIVE_OCR_PADDING = 4; // 增加 4 像素边距确保文字完整性
+
+    /** 档号末尾序号（带分隔符）：如 WS·2025*D10·A01-0002 中的 0002 */
+    private static final java.util.regex.Pattern ARCHIVE_SEQ_WITH_SEPARATOR =
+            java.util.regex.Pattern.compile("[-*·_](\\d+)$");
+
+    /** 档号末尾序号（不带分隔符的容错匹配）：如 档号1 中的 1 */
+    private static final java.util.regex.Pattern ARCHIVE_SEQ_AT_END =
+            java.util.regex.Pattern.compile("(\\d+)$");
     /** 任务取消标志：key为任务ID（使用输入目录路径），value为是否取消 */
     private static final ConcurrentHashMap<String, Boolean> taskCancelFlags = new ConcurrentHashMap<>();
 
@@ -1326,7 +1334,9 @@ public class DesktopApiController extends BaseController {
     /**
      * 比较文件名的自然排序
      * 【修复】针对档号格式优化，确保序号按数字排序
-     * 【关键】支持不同分隔符顺序：WS·2025*D10·A01-0002 和 WS*2025·D10·A01-0003
+     * 【修复】前缀（档号主体）优先，序号次之：先按去掉末尾序号后的前缀分组，
+     * 同一前缀内再按序号数字排序，避免多个卷册/档号的文件仅凭序号交叉穿插
+     * （如 卷A-01、卷A-02、卷B-01、卷B-02 不再被排成 卷A-01、卷B-01、卷A-02、卷B-02）
      *
      * @param f1 第一个文件
      * @param f2 第二个文件
@@ -1336,49 +1346,48 @@ public class DesktopApiController extends BaseController {
         String name1 = f1.getName();
         String name2 = f2.getName();
 
-        // 【修复】优先提取序号进行数字排序
-        Integer seq1 = extractArchiveSequenceNumber(name1);
-        Integer seq2 = extractArchiveSequenceNumber(name2);
+        // 提取 [前缀, 序号]；前缀相同视为同一卷册/档号系列
+        String[] parts1 = extractArchivePrefixAndSequence(name1);
+        String[] parts2 = extractArchivePrefixAndSequence(name2);
 
-        if (seq1 != null && seq2 != null) {
-            // 两个都是档号文件，按序号数字排序
-            int seqCompare = Integer.compare(seq1, seq2);
+        if (parts1 != null && parts2 != null) {
+            // 【修复】先比较前缀，保证同一卷册的文件连续
+            int prefixCompare = compareNatural(parts1[0], parts2[0]);
+            if (prefixCompare != 0) {
+                return prefixCompare;
+            }
+            // 前缀相同再按序号数字排序（compareNatural 对纯数字串为数值比较，无溢出风险）
+            int seqCompare = compareNatural(parts1[1], parts2[1]);
             if (seqCompare != 0) {
-                log.info("档号序号比较: {} (序号:{}) vs {} (序号:{}) = 按序号排序:{}",
-                         name1, seq1, name2, seq2, seqCompare > 0 ? "前者大" : "后者大");
                 return seqCompare;
             }
-            // 序号相同时，按文件名字典序（作为第二排序条件）
-            log.debug("档号序号相同({})，按文件名字典序排序", seq1);
+            // 前缀和序号都相同（如分隔符写法不同），按完整文件名兜底，保证排序稳定
             return name1.compareTo(name2);
         }
 
-        // 【修复】只有一个能提取序号的情况
-        if (seq1 != null) {
-            log.info("只有前者是档号格式(序号:{})，优先排序", seq1);
-            return -1;  // 档号文件排前面
+        // 只有一个是档号文件：档号文件排前面（与原有行为保持一致）
+        if (parts1 != null) {
+            return -1;
         }
-        if (seq2 != null) {
-            log.info("只有后者是档号格式(序号:{})，优先排序", seq2);
-            return 1;   // 档号文件排前面
+        if (parts2 != null) {
+            return 1;
         }
 
         // 都不是档号文件，使用常规自然排序
-        log.debug("都不是档号格式，使用自然排序");
         return compareNatural(name1, name2);
     }
 
     /**
-     * 【新增】从档号文件名中提取序号
-     * 【修复】支持任意分隔符组合：·、*、-，甚至没有分隔符的情况
+     * 从档号文件名中提取前缀与序号
+     * 支持任意分隔符组合：·、*、-、_，甚至没有分隔符的情况
      * 档号格式示例：
-     * - WS·2025*D10·A01-0002 → 提取 0002 (序号 2)
-     * - 档号1 → 提取 1 (序号 1)
+     * - WS·2025*D10·A01-0002 → 前缀 "WS·2025*D10·A01-"，序号 "0002"
+     * - 档号1 → 前缀 "档号"，序号 "1"
      *
-     * @param fileName 文件名
-     * @return 提取的序号，如果不是档号格式返回null
+     * @param fileName 文件名（含扩展名）
+     * @return 长度为2的数组 [前缀, 序号原始数字串]；不是档号格式返回null
      */
-    private Integer extractArchiveSequenceNumber(String fileName) {
+    private String[] extractArchivePrefixAndSequence(String fileName) {
         if (fileName == null || fileName.isEmpty()) {
             return null;
         }
@@ -1390,40 +1399,42 @@ public class DesktopApiController extends BaseController {
             name = fileName.substring(0, dotIndex);
         }
 
-        log.debug("开始提取序号: {}", name);
-
-        // 【修复】模式1：尝试匹配带有分隔符的最后数字（如 WS·2025*D10·A01-0002）
-        java.util.regex.Pattern pattern1 = java.util.regex.Pattern.compile("[-*·_](\\d+)$");
-        java.util.regex.Matcher matcher1 = pattern1.matcher(name);
-
-        if (matcher1.find()) {
-            try {
-                String seqStr = matcher1.group(1);
-                Integer seq = Integer.parseInt(seqStr);
-                log.info("成功提取序号: {} → {}", name, seq);
-                return seq;
-            } catch (NumberFormatException e) {
-                log.debug("解析序号失败: {}", name);
-            }
+        // 模式1：带有分隔符的最后数字（如 WS·2025*D10·A01-0002）
+        java.util.regex.Matcher matcher = ARCHIVE_SEQ_WITH_SEPARATOR.matcher(name);
+        if (matcher.find()) {
+            return new String[]{name.substring(0, matcher.start(1)), matcher.group(1)};
         }
 
-        // 【新增】模式2：提取字符串末尾的连续数字（容错处理，例如"档号1"）
-        java.util.regex.Pattern pattern2 = java.util.regex.Pattern.compile("(\\d+)$");
-        java.util.regex.Matcher matcher2 = pattern2.matcher(name);
-
-        if (matcher2.find()) {
-            try {
-                String seqStr = matcher2.group(1);
-                Integer seq = Integer.parseInt(seqStr);
-                log.info("容错提取序号: {} → {}", name, seq);
-                return seq;
-            } catch (NumberFormatException e) {
-                log.debug("容错解析序号失败: {}", name);
-            }
+        // 模式2：字符串末尾的连续数字（容错处理，例如"档号1"）
+        matcher = ARCHIVE_SEQ_AT_END.matcher(name);
+        if (matcher.find()) {
+            return new String[]{name.substring(0, matcher.start(1)), matcher.group(1)};
         }
 
-        log.debug("未能提取序号: {}", name);
         return null;
+    }
+
+    /**
+     * 从档号文件名中提取序号
+     * 支持任意分隔符组合：·、*、-，甚至没有分隔符的情况
+     * 档号格式示例：
+     * - WS·2025*D10·A01-0002 → 提取 0002 (序号 2)
+     * - 档号1 → 提取 1 (序号 1)
+     *
+     * @param fileName 文件名
+     * @return 提取的序号，如果不是档号格式或序号超出整数范围返回null
+     */
+    private Integer extractArchiveSequenceNumber(String fileName) {
+        String[] parts = extractArchivePrefixAndSequence(fileName);
+        if (parts == null) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(parts[1]);
+        } catch (NumberFormatException e) {
+            log.debug("序号超出整数范围，视为无法提取: {}", parts[1]);
+            return null;
+        }
     }
 
     private int compareNatural(String s1, String s2) {
@@ -1711,127 +1722,127 @@ public class DesktopApiController extends BaseController {
             response.setHeader("Content-Disposition", "attachment;filename*=UTF-8''" +
                     URLEncoder.encode(fileName, "UTF-8"));
 
-            // 使用Apache POI生成Excel
-            org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook();
-            org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet(folderName + "统计清单");
+            // 使用Apache POI生成Excel（使用try-with-resources确保异常时正常释放Workbook资源）
+            try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
+                org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet(folderName + "统计清单");
 
-            // 创建样式
-            org.apache.poi.ss.usermodel.CellStyle headerStyle = workbook.createCellStyle();
-            headerStyle.setFillForegroundColor(org.apache.poi.ss.usermodel.IndexedColors.GREY_25_PERCENT.getIndex());
-            headerStyle.setFillPattern(org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND);
-            headerStyle.setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER);
-            headerStyle.setBorderBottom(org.apache.poi.ss.usermodel.BorderStyle.THIN);
-            headerStyle.setBorderTop(org.apache.poi.ss.usermodel.BorderStyle.THIN);
-            headerStyle.setBorderLeft(org.apache.poi.ss.usermodel.BorderStyle.THIN);
-            headerStyle.setBorderRight(org.apache.poi.ss.usermodel.BorderStyle.THIN);
-            org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
-            headerFont.setBold(true);
-            headerStyle.setFont(headerFont);
+                // 创建样式
+                org.apache.poi.ss.usermodel.CellStyle headerStyle = workbook.createCellStyle();
+                headerStyle.setFillForegroundColor(org.apache.poi.ss.usermodel.IndexedColors.GREY_25_PERCENT.getIndex());
+                headerStyle.setFillPattern(org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND);
+                headerStyle.setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER);
+                headerStyle.setBorderBottom(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+                headerStyle.setBorderTop(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+                headerStyle.setBorderLeft(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+                headerStyle.setBorderRight(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+                org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
+                headerFont.setBold(true);
+                headerStyle.setFont(headerFont);
 
-            org.apache.poi.ss.usermodel.CellStyle dataStyle = workbook.createCellStyle();
-            dataStyle.setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER);
-            dataStyle.setBorderBottom(org.apache.poi.ss.usermodel.BorderStyle.THIN);
-            dataStyle.setBorderTop(org.apache.poi.ss.usermodel.BorderStyle.THIN);
-            dataStyle.setBorderLeft(org.apache.poi.ss.usermodel.BorderStyle.THIN);
-            dataStyle.setBorderRight(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+                org.apache.poi.ss.usermodel.CellStyle dataStyle = workbook.createCellStyle();
+                dataStyle.setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER);
+                dataStyle.setBorderBottom(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+                dataStyle.setBorderTop(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+                dataStyle.setBorderLeft(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+                dataStyle.setBorderRight(org.apache.poi.ss.usermodel.BorderStyle.THIN);
 
-            // 标题行
-            org.apache.poi.ss.usermodel.Row titleRow = sheet.createRow(0);
-            org.apache.poi.ss.usermodel.Cell titleCell = titleRow.createCell(0);
-            titleCell.setCellValue(folderName + "文件夹统计清单");
-            org.apache.poi.ss.usermodel.CellStyle titleStyle = workbook.createCellStyle();
-            titleStyle.setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER);
-            org.apache.poi.ss.usermodel.Font titleFont = workbook.createFont();
-            titleFont.setBold(true);
-            titleFont.setFontHeightInPoints((short) 14);
-            titleStyle.setFont(titleFont);
-            titleCell.setCellStyle(titleStyle);
-            sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, 8));
+                // 标题行
+                org.apache.poi.ss.usermodel.Row titleRow = sheet.createRow(0);
+                org.apache.poi.ss.usermodel.Cell titleCell = titleRow.createCell(0);
+                titleCell.setCellValue(folderName + "文件夹统计清单");
+                org.apache.poi.ss.usermodel.CellStyle titleStyle = workbook.createCellStyle();
+                titleStyle.setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER);
+                org.apache.poi.ss.usermodel.Font titleFont = workbook.createFont();
+                titleFont.setBold(true);
+                titleFont.setFontHeightInPoints((short) 14);
+                titleStyle.setFont(titleFont);
+                titleCell.setCellStyle(titleStyle);
+                sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, 8));
 
-            // 表头
-            String[] headers = {"文件夹名称", "大于A0数量", "A0数量", "A1数量", "A2数量", "A3数量", "A4数量", "A4折合页数", "文件总数"};
-            org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(1);
-            for (int i = 0; i < headers.length; i++) {
-                org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(i);
-                cell.setCellValue(headers[i]);
-                cell.setCellStyle(headerStyle);
-            }
-
-            // 数据行
-            int rowNum = 2;
-            int totalLargerThanA0 = 0, totalA0 = 0, totalA1 = 0, totalA2 = 0, totalA3 = 0, totalA4 = 0, totalA4Equivalent = 0, totalFiles = 0;
-
-            for (Map<String, Object> data : subfolderStats) {
-                org.apache.poi.ss.usermodel.Row row = sheet.createRow(rowNum++);
-
-                row.createCell(0).setCellValue((String) data.get("folderName"));
-                int largerThanA0 = data.containsKey("totalLargerThanA0") ? (Integer) data.get("totalLargerThanA0") : 0;
-                int a0 = (Integer) data.get("totalA0");
-                int a1 = (Integer) data.get("totalA1");
-                int a2 = (Integer) data.get("totalA2");
-                int a3 = (Integer) data.get("totalA3");
-                int a4 = (Integer) data.get("totalA4");
-                int a4Equiv = (Integer) data.get("a4Equivalent");
-                int files = (Integer) data.get("totalFiles");
-
-                row.createCell(1).setCellValue(largerThanA0);
-                row.createCell(2).setCellValue(a0);
-                row.createCell(3).setCellValue(a1);
-                row.createCell(4).setCellValue(a2);
-                row.createCell(5).setCellValue(a3);
-                row.createCell(6).setCellValue(a4);
-                row.createCell(7).setCellValue(a4Equiv);
-                row.createCell(8).setCellValue(files);
-
-                // 应用样式
-                for (int i = 0; i < 9; i++) {
-                    row.getCell(i).setCellStyle(dataStyle);
+                // 表头
+                String[] headers = {"文件夹名称", "大于A0数量", "A0数量", "A1数量", "A2数量", "A3数量", "A4数量", "A4折合页数", "文件总数"};
+                org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(1);
+                for (int i = 0; i < headers.length; i++) {
+                    org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(i);
+                    cell.setCellValue(headers[i]);
+                    cell.setCellStyle(headerStyle);
                 }
 
-                // 累计
-                totalLargerThanA0 += largerThanA0;
-                totalA0 += a0;
-                totalA1 += a1;
-                totalA2 += a2;
-                totalA3 += a3;
-                totalA4 += a4;
-                totalA4Equivalent += a4Equiv;
-                totalFiles += files;
+                // 数据行
+                int rowNum = 2;
+                int totalLargerThanA0 = 0, totalA0 = 0, totalA1 = 0, totalA2 = 0, totalA3 = 0, totalA4 = 0, totalA4Equivalent = 0, totalFiles = 0;
+
+                for (Map<String, Object> data : subfolderStats) {
+                    org.apache.poi.ss.usermodel.Row row = sheet.createRow(rowNum++);
+
+                    row.createCell(0).setCellValue((String) data.get("folderName"));
+                    int largerThanA0 = data.containsKey("totalLargerThanA0") ? (Integer) data.get("totalLargerThanA0") : 0;
+                    int a0 = (Integer) data.get("totalA0");
+                    int a1 = (Integer) data.get("totalA1");
+                    int a2 = (Integer) data.get("totalA2");
+                    int a3 = (Integer) data.get("totalA3");
+                    int a4 = (Integer) data.get("totalA4");
+                    int a4Equiv = (Integer) data.get("a4Equivalent");
+                    int files = (Integer) data.get("totalFiles");
+
+                    row.createCell(1).setCellValue(largerThanA0);
+                    row.createCell(2).setCellValue(a0);
+                    row.createCell(3).setCellValue(a1);
+                    row.createCell(4).setCellValue(a2);
+                    row.createCell(5).setCellValue(a3);
+                    row.createCell(6).setCellValue(a4);
+                    row.createCell(7).setCellValue(a4Equiv);
+                    row.createCell(8).setCellValue(files);
+
+                    // 应用样式
+                    for (int i = 0; i < 9; i++) {
+                        row.getCell(i).setCellStyle(dataStyle);
+                    }
+
+                    // 累计
+                    totalLargerThanA0 += largerThanA0;
+                    totalA0 += a0;
+                    totalA1 += a1;
+                    totalA2 += a2;
+                    totalA3 += a3;
+                    totalA4 += a4;
+                    totalA4Equivalent += a4Equiv;
+                    totalFiles += files;
+                }
+
+                // 合计行
+                org.apache.poi.ss.usermodel.Row totalRow = sheet.createRow(rowNum);
+                org.apache.poi.ss.usermodel.CellStyle totalStyle = workbook.createCellStyle();
+                totalStyle.cloneStyleFrom(dataStyle);
+                totalStyle.setFillForegroundColor(org.apache.poi.ss.usermodel.IndexedColors.LIGHT_YELLOW.getIndex());
+                totalStyle.setFillPattern(org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND);
+                org.apache.poi.ss.usermodel.Font totalFont = workbook.createFont();
+                totalFont.setBold(true);
+                totalStyle.setFont(totalFont);
+
+                totalRow.createCell(0).setCellValue("合计");
+                totalRow.createCell(1).setCellValue(totalLargerThanA0);
+                totalRow.createCell(2).setCellValue(totalA0);
+                totalRow.createCell(3).setCellValue(totalA1);
+                totalRow.createCell(4).setCellValue(totalA2);
+                totalRow.createCell(5).setCellValue(totalA3);
+                totalRow.createCell(6).setCellValue(totalA4);
+                totalRow.createCell(7).setCellValue(totalA4Equivalent);
+                totalRow.createCell(8).setCellValue(totalFiles);
+
+                for (int i = 0; i < 9; i++) {
+                    totalRow.getCell(i).setCellStyle(totalStyle);
+                }
+
+                // 设置列宽
+                sheet.setColumnWidth(0, 20 * 256);
+                for (int i = 1; i < 9; i++) {
+                    sheet.setColumnWidth(i, 12 * 256);
+                }
+
+                // 写入响应
+                workbook.write(response.getOutputStream());
             }
-
-            // 合计行
-            org.apache.poi.ss.usermodel.Row totalRow = sheet.createRow(rowNum);
-            org.apache.poi.ss.usermodel.CellStyle totalStyle = workbook.createCellStyle();
-            totalStyle.cloneStyleFrom(dataStyle);
-            totalStyle.setFillForegroundColor(org.apache.poi.ss.usermodel.IndexedColors.LIGHT_YELLOW.getIndex());
-            totalStyle.setFillPattern(org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND);
-            org.apache.poi.ss.usermodel.Font totalFont = workbook.createFont();
-            totalFont.setBold(true);
-            totalStyle.setFont(totalFont);
-
-            totalRow.createCell(0).setCellValue("合计");
-            totalRow.createCell(1).setCellValue(totalLargerThanA0);
-            totalRow.createCell(2).setCellValue(totalA0);
-            totalRow.createCell(3).setCellValue(totalA1);
-            totalRow.createCell(4).setCellValue(totalA2);
-            totalRow.createCell(5).setCellValue(totalA3);
-            totalRow.createCell(6).setCellValue(totalA4);
-            totalRow.createCell(7).setCellValue(totalA4Equivalent);
-            totalRow.createCell(8).setCellValue(totalFiles);
-
-            for (int i = 0; i < 9; i++) {
-                totalRow.getCell(i).setCellStyle(totalStyle);
-            }
-
-            // 设置列宽
-            sheet.setColumnWidth(0, 20 * 256);
-            for (int i = 1; i < 9; i++) {
-                sheet.setColumnWidth(i, 12 * 256);
-            }
-
-            // 写入响应
-            workbook.write(response.getOutputStream());
-            workbook.close();
 
             log.info("导出文件夹统计Excel完成: {}", fileName);
 
@@ -2985,8 +2996,8 @@ public class DesktopApiController extends BaseController {
         try {
             List<String> logLines = new ArrayList<>();
 
-            // 主日志文件路径
-            String logFilePath = System.getProperty("user.home") + "/.pdfutil/logs/java.log";
+            // 主日志文件路径（与 logback-desktop.xml 配置保持一致）
+            String logFilePath = System.getProperty("user.home") + "/.pdfutil/logs/pdfutil.log";
             File logFile = new File(logFilePath);
 
             // 确保日志目录存在

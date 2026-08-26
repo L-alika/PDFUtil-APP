@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -107,12 +108,28 @@ public class JsonRecordStorage {
     private void saveRecords(List<PdfConvertRecord> records) {
         synchronized (lock) {
             try {
+                String json = JSON.toJSONString(records != null ? records : new ArrayList<>(), true);
+                byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+
+                // 使用原子文件写入：先写临时文件，再原子替换目标文件，防止写入中断导致数据损坏
+                Path parent = recordsFilePath.getParent();
+                if (parent != null && !Files.exists(parent)) {
+                    Files.createDirectories(parent);
+                }
+                Path tmpFile = recordsFilePath.resolveSibling(RECORDS_FILE + ".tmp." + System.currentTimeMillis());
+                Files.write(tmpFile, bytes);
+                try {
+                    Files.move(tmpFile, recordsFilePath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (Exception e) {
+                    // 部分文件系统或Windows跨卷不支持ATOMIC_MOVE时回退到普通REPLACE_EXISTING
+                    Files.move(tmpFile, recordsFilePath, StandardCopyOption.REPLACE_EXISTING);
+                }
+
+                // 磁盘持久化成功后再更新内存缓存，确保数据一致性
                 cache.clear();
                 if (records != null) {
                     cache.addAll(records);
                 }
-                String json = JSON.toJSONString(records, true);
-                Files.write(recordsFilePath, json.getBytes(StandardCharsets.UTF_8));
             } catch (Exception e) {
                 log.error("保存记录失败", e);
                 throw new RuntimeException("保存记录失败", e);

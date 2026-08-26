@@ -372,18 +372,15 @@ public class DualLayerOfdConverter {
             throw new IOException("检查 pdf2image 失败: " + e.getMessage());
         }
 
-        // 路径处理：统一使用正斜杠（跨平台兼容）
-        String normalizedPdfPath = pdfPath.replace("\\", "/");
-
-        // 构建 pdf2image 命令
+        // 构建 pdf2image 命令（通过 sys.argv 传参，避免路径特殊字符转义异常）
         List<String> command = new ArrayList<>();
         command.add(pythonPath);
         command.add("-c");
-        command.add(String.format(
-            "import pdf2image; " +
-            "pdf2image.convert_from_path('%s', dpi=%d, output_folder='%s', fmt='png', paths_only=True)",
-            normalizedPdfPath, PDF_EXTRACT_DPI, outputDir.replace("\\", "/")
-        ));
+        command.add("import sys, pdf2image\n" +
+                    "pdf2image.convert_from_path(sys.argv[1], dpi=int(sys.argv[2]), output_folder=sys.argv[3], fmt='png', paths_only=True)");
+        command.add(pdfPath);
+        command.add(String.valueOf(PDF_EXTRACT_DPI));
+        command.add(outputDir);
 
         log.debug("PDF转图片命令: {}", command);
 

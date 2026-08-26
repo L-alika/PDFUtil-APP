@@ -187,14 +187,14 @@ public class FileStatsService {
      */
     private PaperSizeResult analyzeImagePaperSize(File imageFile) {
         try {
-            BufferedImage image = ImageIO.read(imageFile);
-            if (image == null) {
-                log.warn("无法读取图片: {}", imageFile.getName());
+            int[] dims = getImageDimensions(imageFile);
+            if (dims == null || dims[0] <= 0 || dims[1] <= 0) {
+                log.warn("无法读取图片尺寸: {}", imageFile.getName());
                 return new PaperSizeResult("other", 1.0);
             }
 
-            int width = image.getWidth();
-            int height = image.getHeight();
+            int width = dims[0];
+            int height = dims[1];
 
             // 取长边和短边
             int longSide = Math.max(width, height);
@@ -296,6 +296,46 @@ public class FileStatsService {
             log.error("分析图片尺寸失败: {}", imageFile.getName(), e);
             return new PaperSizeResult("other", 1.0);
         }
+    }
+
+    /**
+     * 读取图片宽高像素尺寸（优先仅读取图片文件头元数据，避免完整解码位图到堆内存导致OOM）
+     */
+    private int[] getImageDimensions(File imageFile) {
+        try (javax.imageio.stream.ImageInputStream iis = ImageIO.createImageInputStream(imageFile)) {
+            if (iis != null) {
+                Iterator<javax.imageio.ImageReader> readers = ImageIO.getImageReaders(iis);
+                if (readers.hasNext()) {
+                    javax.imageio.ImageReader reader = readers.next();
+                    try {
+                        reader.setInput(iis, true, true);
+                        int w = reader.getWidth(0);
+                        int h = reader.getHeight(0);
+                        if (w > 0 && h > 0) {
+                            return new int[]{w, h};
+                        }
+                    } finally {
+                        reader.dispose();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        // Fallback: 如果元数据读取失败，回退到普通读取并及时释放内存
+        try {
+            BufferedImage image = ImageIO.read(imageFile);
+            if (image != null) {
+                try {
+                    return new int[]{image.getWidth(), image.getHeight()};
+                } finally {
+                    image.flush();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("读取图片尺寸失败: {}", imageFile.getName(), e);
+        }
+        return null;
     }
 
     /**

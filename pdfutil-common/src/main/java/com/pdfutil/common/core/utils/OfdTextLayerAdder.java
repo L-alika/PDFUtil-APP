@@ -50,18 +50,13 @@ public class OfdTextLayerAdder {
             for (int pageIndex = 0; pageIndex < pageCount; pageIndex++) {
                 String imgPath = imagePaths[pageIndex];
 
-                // 1. 获取图片尺寸
-                java.awt.image.BufferedImage bufImg = null;
-                try {
-                    bufImg = javax.imageio.ImageIO.read(new File(imgPath));
-                } catch (Exception e) {
-                    throw new RuntimeException("无法读取图片: " + imgPath + "。错误: " + e.getMessage() + "。详细原因: " + getDetailedImageErrorInfo(new File(imgPath)), e);
+                // 1. 获取图片尺寸（优先元数据读取，避免全量解码位图导致OOM）
+                int[] dims = getImageDimensions(new File(imgPath));
+                if (dims == null || dims[0] <= 0 || dims[1] <= 0) {
+                    throw new RuntimeException("无法读取图片尺寸: " + imgPath + "。该图片格式可能不被支持或已损坏。");
                 }
-                if (bufImg == null) {
-                    throw new RuntimeException("无法读取图片: " + imgPath + "。该图片格式不被支持，或已损坏。详细原因: " + getDetailedImageErrorInfo(new File(imgPath)));
-                }
-                int imgW = bufImg.getWidth();
-                int imgH = bufImg.getHeight();
+                int imgW = dims[0];
+                int imgH = dims[1];
 
                 // 2. 将像素尺寸转换到毫米 (mm)
                 double pageW_mm = (imgW * 25.4) / sourceDpi;
@@ -129,18 +124,13 @@ public class OfdTextLayerAdder {
                 final float pageDpi = rawDpi <= 0 ? 200.0f : rawDpi;
                 JsonNode pageData = (pages != null && pages.isArray() && pageIndex < pages.size()) ? pages.get(pageIndex) : null;
 
-                // 1. 获取图片尺寸
-                java.awt.image.BufferedImage bufImg = null;
-                try {
-                    bufImg = javax.imageio.ImageIO.read(new File(imgPath));
-                } catch (Exception e) {
-                    throw new RuntimeException("无法读取图片: " + imgPath + "。错误: " + e.getMessage() + "。详细原因: " + getDetailedImageErrorInfo(new File(imgPath)), e);
+                // 1. 获取图片尺寸（优先元数据读取，避免全量解码位图导致OOM）
+                int[] dims = getImageDimensions(new File(imgPath));
+                if (dims == null || dims[0] <= 0 || dims[1] <= 0) {
+                    throw new RuntimeException("无法读取图片尺寸: " + imgPath + "。该图片格式可能不被支持或已损坏。");
                 }
-                if (bufImg == null) {
-                    throw new RuntimeException("无法读取图片: " + imgPath + "。该图片格式不被支持，或已损坏。详细原因: " + getDetailedImageErrorInfo(new File(imgPath)));
-                }
-                int imgW = bufImg.getWidth();
-                int imgH = bufImg.getHeight();
+                int imgW = dims[0];
+                int imgH = dims[1];
 
                 // 2. 将像素尺寸转换到毫米 (mm) - 使用当前页的 DPI
                 double pageW_mm = (imgW * 25.4) / pageDpi;
@@ -826,5 +816,45 @@ public class OfdTextLayerAdder {
             double dynamicThreshold = Math.min(2.0 + len * 0.15, 2.8);
             return ratio > dynamicThreshold;
         }
+    }
+
+    /**
+     * 读取图片宽高像素尺寸（优先仅读取图片文件头元数据，避免完整解码位图到堆内存导致OOM）
+     */
+    private static int[] getImageDimensions(File imageFile) {
+        try (javax.imageio.stream.ImageInputStream iis = javax.imageio.ImageIO.createImageInputStream(imageFile)) {
+            if (iis != null) {
+                java.util.Iterator<javax.imageio.ImageReader> readers = javax.imageio.ImageIO.getImageReaders(iis);
+                if (readers.hasNext()) {
+                    javax.imageio.ImageReader reader = readers.next();
+                    try {
+                        reader.setInput(iis, true, true);
+                        int w = reader.getWidth(0);
+                        int h = reader.getHeight(0);
+                        if (w > 0 && h > 0) {
+                            return new int[]{w, h};
+                        }
+                    } finally {
+                        reader.dispose();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        // Fallback: 如果元数据读取失败，回退到普通读取并及时释放内存
+        try {
+            java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(imageFile);
+            if (image != null) {
+                try {
+                    return new int[]{image.getWidth(), image.getHeight()};
+                } finally {
+                    image.flush();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("读取图片尺寸失败: {}", imageFile.getName(), e);
+        }
+        return null;
     }
 }

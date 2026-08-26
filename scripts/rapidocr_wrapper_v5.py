@@ -96,14 +96,15 @@ def process_images(inputs):
             result, elapse = ocr(img_path)
             
             page_items = []
-            for item in result:
-                if len(item) >= 3:
-                    box, text, score = item[0], item[1], item[2]
-                    page_items.append({
-                        "text": text,
-                        "text_region": [[int(p[0]), int(p[1])] for p in box] if box else [],
-                        "confidence": float(score) if isinstance(score, (int, float)) else 0.99
-                    })
+            if result:
+                for item in result:
+                    if len(item) >= 3:
+                        box, text, score = item[0], item[1], item[2]
+                        page_items.append({
+                            "text": text,
+                            "text_region": [[int(p[0]), int(p[1])] for p in box] if box else [],
+                            "confidence": float(score) if isinstance(score, (int, float)) else 0.99
+                        })
             
             pages.append(page_items)
             print(f"[PROGRESS] 第 {idx + 1}页完成，识别 {len(page_items)} 个文本块，耗时 {elapse:.2f}s", file=sys.stderr, flush=True)

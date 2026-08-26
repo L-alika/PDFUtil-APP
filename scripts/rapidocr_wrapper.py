@@ -222,14 +222,15 @@ def process_single_image(ocr_engine, img_path):
     result, elapse = ocr_engine(img_path)
     
     page_items = []
-    for item in result:
-        if len(item) >= 3:
-            box, text, score = item[0], item[1], item[2]
-            page_items.append({
-                "text": text,
-                "text_region": [[int(p[0]), int(p[1])] for p in box] if box else [],
-                "confidence": float(score) if isinstance(score, (int, float)) else 0.99
-            })
+    if result:
+        for item in result:
+            if len(item) >= 3:
+                box, text, score = item[0], item[1], item[2]
+                page_items.append({
+                    "text": text,
+                    "text_region": [[int(p[0]), int(p[1])] for p in box] if box else [],
+                    "confidence": float(score) if isinstance(score, (int, float)) else 0.99
+                })
     
     # 确保 elapse 是数字（RapidOCR 可能返回列表）
     if isinstance(elapse, (list, tuple)):

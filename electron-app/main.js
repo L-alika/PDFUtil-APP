@@ -776,13 +776,30 @@ function stopJavaBackend() {
         console.log('正在停止Java后端...');
         isQuitting = true;
 
-        if (process.platform === 'win32') {
-            spawn('taskkill', ['/pid', javaProcess.pid, '/f', '/t'], { shell: true });
-        } else {
-            javaProcess.kill('SIGTERM');
-        }
-
+        const pid = javaProcess.pid;
+        const proc = javaProcess;
         javaProcess = null;
+
+        if (process.platform === 'win32') {
+            // 先尝试正常关闭进程，给Spring Boot资源清理机会
+            try {
+                proc.kill('SIGTERM');
+            } catch (e) {}
+
+            // 延迟1.5秒后如果还在运行，再强制终止
+            setTimeout(() => {
+                try {
+                    spawn('taskkill', ['/pid', pid, '/f', '/t'], { shell: true });
+                } catch (e) {}
+            }, 1500);
+        } else {
+            proc.kill('SIGTERM');
+            setTimeout(() => {
+                try {
+                    proc.kill('SIGKILL');
+                } catch (e) {}
+            }, 1500);
+        }
     }
 }
 
@@ -790,29 +807,42 @@ function stopJavaBackend() {
 async function scanDirectory(dirPath) {
     try {
         const files = [];
-        const supportedExts = ['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.pdf', '.ofd', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'];
+        const supportedExts = new Set(['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.pdf', '.ofd', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']);
 
-        function scanDir(currentPath) {
-            const items = fs.readdirSync(currentPath);
-            for (const item of items) {
-                const fullPath = path.join(currentPath, item);
-                const stat = fs.statSync(fullPath);
-                if (stat.isDirectory()) {
-                    scanDir(fullPath);
-                } else {
-                    const ext = path.extname(item).toLowerCase();
-                    if (supportedExts.includes(ext)) {
+        async function scanDir(currentPath) {
+            let entries;
+            try {
+                entries = await fs.promises.readdir(currentPath, { withFileTypes: true });
+            } catch (err) {
+                log(`无法读取目录 ${currentPath}: ${err.message}`);
+                return;
+            }
+
+            for (const entry of entries) {
+                const fullPath = path.join(currentPath, entry.name);
+                if (entry.isDirectory()) {
+                    await scanDir(fullPath);
+                } else if (entry.isFile()) {
+                    const ext = path.extname(entry.name).toLowerCase();
+                    if (supportedExts.has(ext)) {
+                        let size = 0;
+                        try {
+                            const stat = await fs.promises.stat(fullPath);
+                            size = stat.size;
+                        } catch (e) {
+                            // 忽略单个文件stat错误
+                        }
                         files.push({
                             path: fullPath,
-                            name: item,
-                            size: stat.size
+                            name: entry.name,
+                            size: size
                         });
                     }
                 }
             }
         }
 
-        scanDir(dirPath);
+        await scanDir(dirPath);
         return { success: true, files };
     } catch (error) {
         log(`扫描目录失败: ${error.message}`);
@@ -872,7 +902,11 @@ async function downloadFile(url, saveDir, filename) {
                 });
 
                 fileStream.on('error', (err) => {
-                    fs.unlinkSync(filePath);
+                    try {
+                        if (fs.existsSync(filePath)) {
+                            fs.unlinkSync(filePath);
+                        }
+                    } catch (e) {}
                     reject(err);
                 });
             });

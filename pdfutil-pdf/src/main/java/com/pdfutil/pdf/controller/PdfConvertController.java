@@ -120,24 +120,41 @@ public class PdfConvertController extends BaseController {
      */
     @GetMapping("/dashboard/trend")
     public AjaxResult getConversionTrend() {
-        // TODO: 实现最近30天的转换趋势统计
-        Map<String, Object> data = new HashMap<>();
-        List<Map<String, Object>> trendData = new ArrayList<>();
-
-        // 模拟数据
-        Calendar cal = Calendar.getInstance();
+        // 按天聚合真实转换记录（状态：1-处理中，2-成功，3-失败，与系统概览保持一致）
+        List<PdfConvertRecord> allRecords = pdfConvertRecordService.selectPdfConvertRecordList(new PdfConvertRecord());
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 
-        for (int i = 29; i >= 0; i--) {
-            cal.add(Calendar.DAY_OF_MONTH, -1);
-            Map<String, Object> dayData = new HashMap<>();
-            dayData.put("date", sdf.format(cal.getTime()));
-            dayData.put("success", (int) (Math.random() * 50) + 10);
-            dayData.put("failed", (int) (Math.random() * 5));
-            trendData.add(dayData);
-            cal.add(Calendar.DAY_OF_MONTH, 1); // 恢复
+        Map<String, int[]> countByDay = new HashMap<>();
+        for (PdfConvertRecord record : allRecords) {
+            if (record.getCreateTime() == null) {
+                continue;
+            }
+            // int[]{成功数, 失败数}
+            int[] counts = countByDay.computeIfAbsent(sdf.format(record.getCreateTime()), k -> new int[2]);
+            if ("2".equals(record.getStatus())) {
+                counts[0]++;
+            } else if ("3".equals(record.getStatus())) {
+                counts[1]++;
+            }
         }
 
+        List<Map<String, Object>> trendData = new ArrayList<>();
+        // 【修复】旧实现每次减1天后立即加1天"恢复"，30次循环取到的都是同一天；
+        // 现改为从29天前逐日推进到今天，生成连续30天的日期序列
+        Calendar cal = Calendar.getInstance();
+        cal.add(Calendar.DAY_OF_MONTH, -29);
+        for (int i = 0; i < 30; i++) {
+            String day = sdf.format(cal.getTime());
+            int[] counts = countByDay.getOrDefault(day, new int[2]);
+            Map<String, Object> dayData = new HashMap<>();
+            dayData.put("date", day);
+            dayData.put("success", counts[0]);
+            dayData.put("failed", counts[1]);
+            trendData.add(dayData);
+            cal.add(Calendar.DAY_OF_MONTH, 1);
+        }
+
+        Map<String, Object> data = new HashMap<>();
         data.put("trend", trendData);
         return AjaxResult.success(data);
     }

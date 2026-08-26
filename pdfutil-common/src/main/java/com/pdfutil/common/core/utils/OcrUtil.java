@@ -1,9 +1,11 @@
 package com.pdfutil.common.core.utils;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.UUID;
 
 /**
  * @Project dev-pdfUtil
@@ -36,23 +38,33 @@ public class OcrUtil {
      * @throws Exception 执行过程中可能抛出的异常
      */
     public static String ocrPdfToText(String inputPdfPath) throws Exception {
-
-        String workDir = System.getProperty("java.io.tmpdir") + "/ocr_local";
+        String uniqueId = UUID.randomUUID().toString().substring(0, 8) + "_" + System.currentTimeMillis();
+        String workDir = System.getProperty("java.io.tmpdir") + File.separator + "ocr_local_" + uniqueId;
         File dir = new File(workDir);
-        if (!dir.exists())
+        if (!dir.exists()) {
             dir.mkdirs();
+        }
 
-        String outputPdf = workDir + "/ocr_output.pdf";
-        String outputTxt = workDir + "/ocr_output.txt";
+        String outputPdf = workDir + File.separator + "ocr_output_" + uniqueId + ".pdf";
+        String outputTxt = workDir + File.separator + "ocr_output_" + uniqueId + ".txt";
 
-        // 1. 执行 ocrmypdf 进行PDF OCR处理
-        execCommand(buildOcrmypdfCommand(inputPdfPath, outputPdf));
+        try {
+            // 1. 执行 ocrmypdf 进行PDF OCR处理
+            execCommand(buildOcrmypdfCommand(inputPdfPath, outputPdf));
 
-        // 2. 提取PDF中的文本内容
-        execCommand(buildPdftotextCommand(outputPdf, outputTxt));
+            // 2. 提取PDF中的文本内容
+            execCommand(buildPdftotextCommand(outputPdf, outputTxt));
 
-        // 3. 读取并返回提取的文本
-        return new String(Files.readAllBytes(Paths.get(outputTxt)), "UTF-8");
+            // 3. 读取并返回提取的文本
+            return new String(Files.readAllBytes(Paths.get(outputTxt)), StandardCharsets.UTF_8);
+        } finally {
+            try {
+                Files.deleteIfExists(Paths.get(outputPdf));
+                Files.deleteIfExists(Paths.get(outputTxt));
+                dir.delete();
+            } catch (Exception ignore) {
+            }
+        }
     }
 
 
@@ -63,13 +75,14 @@ public class OcrUtil {
      * @throws Exception 当OCR处理失败或文件操作异常时抛出
      */
     public static void ocrPdfAndOverwrite(String pdfPath) throws Exception {
-        String workDir = System.getProperty("java.io.tmpdir") + "/ocr_local";
+        String uniqueId = UUID.randomUUID().toString().substring(0, 8) + "_" + System.currentTimeMillis();
+        String workDir = System.getProperty("java.io.tmpdir") + File.separator + "ocr_local_" + uniqueId;
         File dir = new File(workDir);
         if (!dir.exists())
             dir.mkdirs();
 
         // 生成一个临时输出 PDF
-        String tmpOutput = workDir + "/ocr_tmp_" + System.currentTimeMillis() + ".pdf";
+        String tmpOutput = workDir + File.separator + "ocr_tmp_" + uniqueId + ".pdf";
 
         try {
             // 1. 执行 OCR 生成双层 PDF
@@ -90,6 +103,7 @@ public class OcrUtil {
             // 4. 清理临时文件（不重要失败也不会影响主流程）
             try {
                 Files.deleteIfExists(Paths.get(tmpOutput));
+                dir.delete();
             } catch (Exception ignore) {
             }
         }

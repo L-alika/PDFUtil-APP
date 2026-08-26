@@ -161,9 +161,18 @@ public class LicenseController {
     public AjaxResult generateLicenseCode(@RequestBody Map<String, Object> params) {
         String macAddress = (String) params.get("macAddress");
         Integer expireDays = (Integer) params.getOrDefault("expireDays", 0);
+        String adminKey = (String) params.get("adminKey");
 
         if (macAddress == null || macAddress.trim().isEmpty()) {
             return AjaxResult.error("MAC地址不能为空");
+        }
+
+        // 安全检查：如果配置了管理员密钥，必须校验密钥
+        String configuredAdminKey = System.getProperty("pdfutil.admin.key", System.getenv("PDFUTIL_ADMIN_KEY"));
+        if (configuredAdminKey != null && !configuredAdminKey.trim().isEmpty()) {
+            if (adminKey == null || !configuredAdminKey.equals(adminKey.trim())) {
+                return AjaxResult.error("无权限生成授权码：管理员密钥错误");
+            }
         }
 
         try {

@@ -449,8 +449,8 @@ public class HocrTextLayerAdder {
                 }
 
                 if (supportedChars == null) {
-                    // 首次检测：构建该字体的支持字符缓存
-                    Set<Character> newCache = new java.util.HashSet<>();
+                    // 首次检测：构建该字体的支持字符缓存（使用线程安全Set避免并发写入异常）
+                    Set<Character> newCache = ConcurrentHashMap.newKeySet();
                     int newSupported = 0;
 
                     for (int i = 0; i < text.length(); i++) {

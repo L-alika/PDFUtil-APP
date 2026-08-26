@@ -249,24 +249,22 @@ public class DualLayerPdfConverter {
     public static void convertImageToSingleLayerPdf(String imagePath, String pdfPath) throws Exception {
         log.info("将图片转换为单层PDF: {} -> {}", imagePath, pdfPath);
 
-        // 使用 Python PIL 库将图片转换为 PDF
+        // 使用 Python PIL 库将图片转换为 PDF（通过 sys.argv 传参，避免文件名包含引号或特殊字符时解析失败）
         String pythonPath = getPythonPath();
-        String normalizedImagePath = imagePath.replace("\\", "/");
-        String normalizedPdfPath = pdfPath.replace("\\", "/");
 
         // 使用配置的 DPI
         String[] command = {
             pythonPath, "-c",
-            String.format(
-                "from PIL import Image\n" +
-                "img = Image.open('%s')\n" +
-                "if img.mode != 'RGB':\n" +
-                "    img = img.convert('RGB')\n" +
-                "img.save('%s', 'PDF', resolution=%.1f, save_all=True)",
-                normalizedImagePath,
-                normalizedPdfPath,
-                (float)PDF_EXTRACT_DPI
-            )
+            "import sys\n" +
+            "from PIL import Image\n" +
+            "img_path, pdf_path, res = sys.argv[1], sys.argv[2], float(sys.argv[3])\n" +
+            "img = Image.open(img_path)\n" +
+            "if img.mode != 'RGB':\n" +
+            "    img = img.convert('RGB')\n" +
+            "img.save(pdf_path, 'PDF', resolution=res, save_all=True)",
+            imagePath,
+            pdfPath,
+            String.valueOf((float)PDF_EXTRACT_DPI)
         };
 
         log.debug("图片转单层PDF命令: {}", String.join(" ", command));
@@ -1245,19 +1243,17 @@ public class DualLayerPdfConverter {
         // paths_only + output_folder 让底层Poppler直接落盘，避免Python端持有所有PIL图片并再次保存。
         String[] command = {
             pythonPath, "-c",
-            String.format(
-                "from pdf2image import convert_from_path\n" +
-                "import os\n" +
-                "os.makedirs(r'%s', exist_ok=True)\n" +
-                "paths = convert_from_path(r'%s', dpi=%d, fmt='png', use_cropbox=True, output_folder=r'%s', output_file='page', paths_only=True, thread_count=%d)\n" +
-                "for img_path in paths:\n" +
-                "    print(os.path.abspath(img_path))",
-                normalizedOutputDir,
-                normalizedPdfPath,
-                actualDpi,  // 使用自适应计算的DPI
-                normalizedOutputDir,
-                PDF_EXTRACT_THREAD_COUNT
-            )
+            "import sys, os\n" +
+            "from pdf2image import convert_from_path\n" +
+            "out_dir, pdf_path, dpi_val, thread_cnt = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])\n" +
+            "os.makedirs(out_dir, exist_ok=True)\n" +
+            "paths = convert_from_path(pdf_path, dpi=dpi_val, fmt='png', use_cropbox=True, output_folder=out_dir, output_file='page', paths_only=True, thread_count=thread_cnt)\n" +
+            "for img_path in paths:\n" +
+            "    print(os.path.abspath(img_path))",
+            outputDir,
+            pdfPath,
+            String.valueOf(actualDpi),
+            String.valueOf(PDF_EXTRACT_THREAD_COUNT)
         };
 
         log.info("【质量与性能平衡】PDF转图片: DPI={} ({}), maxDpi={}, threadCount={}, 格式=PNG (无损), 路径: {}",
@@ -1352,12 +1348,12 @@ public class DualLayerPdfConverter {
         String normalizedPath = pdfPath.replace("\\", "/");
 
         try {
-            // 使用PyMuPDF检测PDF的原始DPI
+            // 使用PyMuPDF检测PDF的原始DPI（使用sys.argv传参）
             String pythonScript =
                 "import sys\n" +
                 "try:\n" +
                 "    import fitz  # PyMuPDF\n" +
-                "    doc = fitz.open('" + normalizedPath + "')\n" +
+                "    doc = fitz.open(sys.argv[1])\n" +
                 "    if len(doc) == 0:\n" +
                 "        print(0)\n" +
                 "        sys.exit(0)\n" +
@@ -1391,7 +1387,7 @@ public class DualLayerPdfConverter {
                 "    # 检测失败，返回0\n" +
                 "    print(0)\n";
 
-            String[] command = {pythonPath, "-c", pythonScript};
+            String[] command = {pythonPath, "-c", pythonScript, pdfPath};
 
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
@@ -1550,18 +1546,17 @@ public class DualLayerPdfConverter {
                 return 300.0f;
             }
 
-            // 使用 Python PIL 检测 DPI（更准确）
+            // 使用 Python PIL 检测 DPI（更准确，使用 sys.argv 传参）
             String pythonPath = getPythonPath();
-            String normalizedPath = imagePath.replace("\\", "/");
 
-            // 修正 Python 命令 - 使用更可靠的字符串拼接方式
             String pythonScript =
-                "from PIL import Image; " +
-                "img = Image.open('" + normalizedPath + "'); " +
-                "dpi = img.info.get('dpi', (0, 0)); " +
+                "import sys\n" +
+                "from PIL import Image\n" +
+                "img = Image.open(sys.argv[1])\n" +
+                "dpi = img.info.get('dpi', (0, 0))\n" +
                 "print(dpi[0] if dpi[0] else 0)";
 
-            String[] command = {pythonPath, "-c", pythonScript};
+            String[] command = {pythonPath, "-c", pythonScript, imagePath};
 
             log.debug("检测图片DPI命令: {}", String.join(" ", command));
 
@@ -1838,22 +1833,19 @@ public class DualLayerPdfConverter {
 
         // 使用 Python PIL 库将图片转换为 PDF
         String pythonPath = getPythonPath();
-        String normalizedImagePath = imagePath.replace("\\", "/");
-        String normalizedPdfPath = pdfPath.replace("\\", "/");
 
-        // 【修复】使用配置的 DPI，与其他转换保持一致
+        // 【修复】使用配置的 DPI，使用 sys.argv 传参
         String[] command = {
             pythonPath, "-c",
-            String.format(
-                "from PIL import Image\n" +
-                "img = Image.open('%s')\n" +
-                "if img.mode != 'RGB':\n" +
-                "    img = img.convert('RGB')\n" +
-                "img.save('%s', 'PDF', resolution=%.1f, save_all=True)",
-                normalizedImagePath,
-                normalizedPdfPath,
-                (float)PDF_EXTRACT_DPI
-            )
+            "import sys\n" +
+            "from PIL import Image\n" +
+            "img = Image.open(sys.argv[1])\n" +
+            "if img.mode != 'RGB':\n" +
+            "    img = img.convert('RGB')\n" +
+            "img.save(sys.argv[2], 'PDF', resolution=float(sys.argv[3]), save_all=True)",
+            imagePath,
+            pdfPath,
+            String.valueOf((float)PDF_EXTRACT_DPI)
         };
 
         log.debug("图片转PDF命令: {}", String.join(" ", command));

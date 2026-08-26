@@ -229,6 +229,12 @@ public class LicenseUtils {
 
             // 获取当前MAC地址
             List<String> currentMacs = getMacAddresses();
+            if (currentMacs.isEmpty()) {
+                String machineId = generateMachineId();
+                if (machineId != null && !machineId.isEmpty()) {
+                    currentMacs.add(machineId);
+                }
+            }
 
             // 验证MAC地址是否匹配
             String licensedMac = info.getMacAddress();

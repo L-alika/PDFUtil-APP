@@ -50,8 +50,8 @@ public class PdfOutputPathBuilder {
      *
      * @param baseOutputDir    基础输出目录
      * @param sourceFilePath   源文件路径
-     * @param folderCreateRule 文件夹创建规则(0-7)
-     * @param preservePath     保持目录结构的相对路径（规则5/6/7使用）
+     * @param folderCreateRule 文件夹创建规则(0-8)
+     * @param preservePath     保持目录结构的相对路径（规则5/6/7/8使用）
      * @return 构建后的输出目录路径
      */
     public static String buildOutputDir(String baseOutputDir, String sourceFilePath,
@@ -61,7 +61,7 @@ public class PdfOutputPathBuilder {
         }
 
         // 默认规则0：不创建文件夹
-        if (folderCreateRule < 0 || folderCreateRule > 7) {
+        if (folderCreateRule < 0 || folderCreateRule > 8) {
             folderCreateRule = 0;
         }
 

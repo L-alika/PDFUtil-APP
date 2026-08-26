@@ -114,6 +114,34 @@ public class LocalOcrPdfConverter {
     }
 
     /**
+     * 【修复】获取原始图片的源DPI，用于按图片真实物理尺寸生成PDF页面
+     * （HocrTextLayerAdder 以 像素/源DPI*72 计算页面点阵尺寸，源DPI失真会导致纸张尺寸变形，
+     * 如 300 DPI 的 A4 扫描件 2480x3508 若按 200 DPI 计算会放大为 892.8pt 而非标准 595.2pt）
+     *
+     * 优先级与 RapidOCR 转换路径（DualLayerPdfConverter）保持一致：
+     * 1. -Dimage.force.dpi 强制指定
+     * 2. 图片DPI元数据检测，失败时按像素尺寸推断（如 A4@300DPI=2480x3508）
+     *
+     * @param imagePath 图片路径
+     * @param width 图片宽度（像素）
+     * @param height 图片高度（像素）
+     * @return 源DPI
+     */
+    private static float resolveSourceDpiForImage(String imagePath, int width, int height) {
+        String forcedDpi = System.getProperty("image.force.dpi");
+        if (forcedDpi != null && !forcedDpi.isEmpty()) {
+            try {
+                float dpi = Float.parseFloat(forcedDpi);
+                log.info("使用强制指定的图片DPI: {} (-Dimage.force.dpi={})", dpi, forcedDpi);
+                return dpi;
+            } catch (NumberFormatException e) {
+                log.warn("无效的强制DPI值: {}，将自动检测", forcedDpi);
+            }
+        }
+        return DualLayerPdfConverter.detectImageDpi(imagePath, width, height);
+    }
+
+    /**
      * 创建配置好的LocalOcrClient实例
      * 从系统属性读取配置
      *
@@ -262,8 +290,9 @@ public class LocalOcrPdfConverter {
             JsonNode pageData = pagesNode.get(0);
             ObjectMapper mapper = new ObjectMapper();
             String pageOcrResult = "{\"pages\": [" + mapper.writeValueAsString(pageData) + "]}";
-            // 统一使用配置的 DPI，与其他转换保持一致
-            method.invoke(null, imagePath, pageOcrResult, imageWidth, imageHeight, outputPath, (float)DualLayerPdfConverter.PDF_EXTRACT_DPI);
+            // 【修复】按原始图片自身DPI计算PDF页面尺寸，避免强制使用PDF提取DPI导致页面失真
+            method.invoke(null, imagePath, pageOcrResult, imageWidth, imageHeight, outputPath,
+                    resolveSourceDpiForImage(imagePath, imageWidth, imageHeight));
 
             log.info("图片双层PDF生成成功");
 
@@ -964,8 +993,11 @@ public class LocalOcrPdfConverter {
             ObjectMapper mapper = new ObjectMapper();
             String pageOcrResult = "{\"pages\": [" + mapper.writeValueAsString(ocrResult) + "]}";
 
-            // 统一使用配置的 DPI
-            method.invoke(null, imagePath, pageOcrResult, width, height, outputPath, (float)DualLayerPdfConverter.PDF_EXTRACT_DPI);
+            // 【修复】按原始图片自身DPI计算PDF页面尺寸：
+            // 原实现写死 PDF_EXTRACT_DPI(默认200)，300 DPI扫描件(A4: 2480x3508)会被放大为
+            // 2480/200*72=892.8pt(约12.4英寸宽)，而非标准A4的595.2pt，导致PDF纸张尺寸失真
+            method.invoke(null, imagePath, pageOcrResult, width, height, outputPath,
+                    resolveSourceDpiForImage(imagePath, width, height));
 
             log.debug("双层PDF生成成功: {}", outputPath);
 

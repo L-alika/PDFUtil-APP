@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -216,22 +217,16 @@ public class WordToPdfConverter {
             outputDir.mkdirs();
         }
 
+        String tempPdfPath = null;
         try {
             // 步骤1: 使用 LibreOffice 将 Office 文档转为普通 PDF
             log.info("步骤1: 使用 LibreOffice 转换为普通 PDF");
-            String tempPdfPath = convertOfficeToPdf(inputPath);
+            tempPdfPath = convertOfficeToPdf(inputPath);
             log.info("临时 PDF 文件已生成: {}", tempPdfPath);
 
             // 步骤2: 使用 OCRmyPDF 将普通 PDF 转为双层 PDF
             log.info("步骤2: 使用 OCRmyPDF 生成双层 PDF");
             DualLayerPdfConverter.convertToDualLayerPdf(tempPdfPath, outputPath);
-
-            // 步骤3: 清理临时文件
-            File tempPdf = new File(tempPdfPath);
-            if (tempPdf.exists()) {
-                boolean deleted = tempPdf.delete();
-                log.info("临时 PDF 文件删除: {}", deleted ? "成功" : "失败");
-            }
 
             // 验证输出文件
             if (!outputFile.exists() || outputFile.length() == 0) {
@@ -243,6 +238,24 @@ public class WordToPdfConverter {
         } catch (Exception e) {
             log.error("Office 文档转双层 PDF 失败: {}", inputPath, e);
             throw e;
+        } finally {
+            // 步骤3: 清理临时文件（确保在异常时也能删除）
+            if (tempPdfPath != null) {
+                try {
+                    File tempPdf = new File(tempPdfPath);
+                    if (tempPdf.exists()) {
+                        boolean deleted = tempPdf.delete();
+                        log.info("临时 PDF 文件删除: {}", deleted ? "成功" : "失败");
+                    }
+                    // 清理任务专用的临时目录
+                    File parentDir = tempPdf.getParentFile();
+                    if (parentDir != null && parentDir.getName().startsWith("office_convert_")) {
+                        parentDir.delete();
+                    }
+                } catch (Exception ex) {
+                    log.warn("清理临时文件失败: {}", tempPdfPath, ex);
+                }
+            }
         }
     }
 
@@ -257,8 +270,8 @@ public class WordToPdfConverter {
         String libreOfficePath = getLibreOfficePath();
         File inputFile = new File(inputPath);
 
-        // 创建临时目录
-        String tempDir = System.getProperty("java.io.tmpdir") + "/office_convert";
+        // 创建任务专用的临时目录，避免并发转换同名文件时发生覆盖或竞态冲突
+        String tempDir = System.getProperty("java.io.tmpdir") + File.separator + "office_convert_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 8);
         new File(tempDir).mkdirs();
 
         // 【安全修复】使用安全的命令构建器
