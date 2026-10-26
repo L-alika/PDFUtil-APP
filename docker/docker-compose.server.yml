@@ -1,0 +1,94 @@
+# ====================================================================
+# PDFUtil - 服务器文档存储与全文检索系统 Docker Compose 编排文件
+# 包含：PostgreSQL 15 + MinIO 对象存储 + Elasticsearch 8 (含IK分词) + Redis
+# ====================================================================
+
+version: '3.8'
+
+services:
+  # 1. 关系型数据库 (PostgreSQL 15)
+  pdfutil-postgres:
+    image: postgres:15-alpine
+    container_name: pdfutil-postgres
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: pdfutil
+      POSTGRES_USER: pdfutil
+      POSTGRES_PASSWORD: pdfutil123456
+      TZ: Asia/Shanghai
+    volumes:
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./postgres/data:/var/lib/postgresql/data
+    networks:
+      - pdfutil-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pdfutil -d pdfutil"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. 对象存储服务 (MinIO)
+  pdfutil-minio:
+    image: minio/minio:RELEASE.2023-09-07T02-12-41Z
+    container_name: pdfutil-minio
+    restart: always
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"    # S3 API 端口
+      - "9001:9001"    # Web 控制台管理端口
+    environment:
+      MINIO_ROOT_USER: pdfutil
+      MINIO_ROOT_PASSWORD: pdfutil123456
+      TZ: Asia/Shanghai
+    volumes:
+      - ./minio/data:/data
+    networks:
+      - pdfutil-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # 3. 全文搜索引擎 (Elasticsearch 8.10.2 + IK中文分词插件)
+  pdfutil-elasticsearch:
+    image: elasticsearch:8.10.2
+    container_name: pdfutil-elasticsearch
+    restart: always
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./elasticsearch/data:/usr/share/elasticsearch/data
+      - ./elasticsearch/plugins:/usr/share/elasticsearch/plugins
+    networks:
+      - pdfutil-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # 4. 缓存与分布式协调 (Redis 6.2)
+  pdfutil-redis:
+    image: redis:6.2-alpine
+    container_name: pdfutil-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - ./redis/data:/data
+    networks:
+      - pdfutil-network
+
+networks:
+  pdfutil-network:
+    driver: bridge

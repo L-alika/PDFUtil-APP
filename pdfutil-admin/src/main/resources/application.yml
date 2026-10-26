@@ -42,6 +42,24 @@ pdfutil:
     # LibreOffice配置（用于Office文档转换）
     libreofficePath: ${LIBREOFFICE_PATH:libreoffice}
 
+  # MinIO 对象存储默认配置
+  minio:
+    enabled: ${MINIO_ENABLED:false}
+    endpoint: ${MINIO_ENDPOINT:http://127.0.0.1:9000}
+    accessKey: ${MINIO_ACCESS_KEY:pdfutil}
+    secretKey: ${MINIO_SECRET_KEY:pdfutil123456}
+    bucketRaw: pdfutil-raw
+    bucketPreview: pdfutil-preview
+    bucketThumb: pdfutil-thumb
+
+  # Elasticsearch 全文检索默认配置
+  elasticsearch:
+    enabled: ${ES_ENABLED:false}
+    host: ${ES_HOST:127.0.0.1}
+    port: ${ES_PORT:9200}
+    scheme: ${ES_SCHEME:http}
+    indexName: pdfutil_doc_page
+
 # 服务配置
 server:
   port: 8139

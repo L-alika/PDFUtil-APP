@@ -14,9 +14,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
 
     // 获取应用版本
-    getAppVersion: () => {
-        return require('electron').app.getVersion();
-    },
+    getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+
+    // 读取应用日志
+    readLogs: (maxLines) => ipcRenderer.invoke('read-logs', maxLines),
 
     // 登录请求
     login: (credentials) => ipcRenderer.invoke('login', credentials),

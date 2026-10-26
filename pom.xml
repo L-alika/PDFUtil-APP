@@ -31,6 +31,9 @@
         <tomcat.version>9.0.112</tomcat.version>
         <logback.version>1.2.13</logback.version>
         <spring-framework.version>5.3.39</spring-framework.version>
+        <postgresql.version>42.6.0</postgresql.version>
+        <minio.version>8.5.7</minio.version>
+        <elasticsearch.version>8.10.2</elasticsearch.version>
     </properties>
 
     <!-- 依赖声明 -->
@@ -224,6 +227,27 @@
                 <groupId>com.pdfutil</groupId>
                 <artifactId>pdfutil-common</artifactId>
                 <version>${pdfutil.version}</version>
+            </dependency>
+
+            <!-- PostgreSQL 驱动 -->
+            <dependency>
+                <groupId>org.postgresql</groupId>
+                <artifactId>postgresql</artifactId>
+                <version>${postgresql.version}</version>
+            </dependency>
+
+            <!-- MinIO 对象存储 SDK -->
+            <dependency>
+                <groupId>io.minio</groupId>
+                <artifactId>minio</artifactId>
+                <version>${minio.version}</version>
+            </dependency>
+
+            <!-- Elasticsearch REST Client -->
+            <dependency>
+                <groupId>org.elasticsearch.client</groupId>
+                <artifactId>elasticsearch-rest-client</artifactId>
+                <version>${elasticsearch.version}</version>
             </dependency>
 
         </dependencies>

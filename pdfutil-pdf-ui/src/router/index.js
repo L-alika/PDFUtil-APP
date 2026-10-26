@@ -14,31 +14,30 @@ NProgress.configure({
 const routes = [
   {
     path: '/',
-    redirect: '/pdf/dashboard'
+    redirect: '/pdf/files'
   },
   {
     path: '/pdf',
     component: () => import('@/views/pdf/Layout.vue'),
+    redirect: '/pdf/files',
     children: [
       {
-        path: 'home',
-        name: 'Home',
-        component: () => import('@/views/pdf/Home.vue'),
-        meta: { title: '新建转换任务' }
+        path: 'files',
+        name: 'Files',
+        component: () => import('@/views/pdf/FileManager.vue'),
+        meta: { title: '文档管理' }
       },
       {
-        path: 'tasks',
-        name: 'Tasks',
-        component: () => import('@/views/pdf/Tasks.vue'),
-        meta: { title: '任务管理' }
-      },
-      {
-        path: 'dashboard',
-        name: 'Dashboard',
-        component: () => import('@/views/pdf/Dashboard.vue'),
-        meta: { title: '系统概览' }
+        path: 'search',
+        name: 'Search',
+        component: () => import('@/views/pdf/Search.vue'),
+        meta: { title: '全文检索' }
       }
     ]
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/pdf/files'
   }
 ]
 
@@ -53,7 +52,7 @@ router.beforeEach((to, from, next) => {
   NProgress.start()
 
   // 固定页面标题
-  document.title = '电子档案管理格式转换工具'
+  document.title = (to.meta.title ? `${to.meta.title} - ` : '') + 'PDFUtil 文档管理与全文检索系统'
 
   next()
 })

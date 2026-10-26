@@ -2997,8 +2997,12 @@ public class DesktopApiController extends BaseController {
             List<String> logLines = new ArrayList<>();
 
             // 主日志文件路径（与 logback-desktop.xml 配置保持一致）
+            // 主日志文件路径（优先检查 logback 配置的 pdfutil.log，兼顾 java.log）
             String logFilePath = System.getProperty("user.home") + "/.pdfutil/logs/pdfutil.log";
             File logFile = new File(logFilePath);
+            if (!logFile.exists()) {
+                logFile = new File(System.getProperty("user.home") + "/.pdfutil/logs/java.log");
+            }
 
             // 确保日志目录存在
             File logDir = new File(System.getProperty("user.home") + "/.pdfutil/logs");

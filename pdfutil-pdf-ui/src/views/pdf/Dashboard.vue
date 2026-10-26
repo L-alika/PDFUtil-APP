@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <h2><el-icon><DataAnalysis /></el-icon> 系统概览</h2>
-          <p class="subtitle">实时监控档案转换引擎与存储运行状态</p>
+          <p class="subtitle">实时监控文档转换引擎与存储运行状态</p>
         </div>
       </template>
 

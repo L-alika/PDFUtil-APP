@@ -450,13 +450,17 @@ function startJavaBackend() {
 
         // 添加 Java 路径
         const javaPaths = [
-            'D:\\Alika_\\Java\\jdk-11\\bin',
+            path.join(getResourcePath(), 'jre', 'bin'),
+            path.join(getResourcePath(), 'embedded', 'jre', 'bin'),
+            process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin') : '',
             'C:\\Program Files\\Java\\jdk-11\\bin',
-            'C:\\Program Files\\Eclipse Adoptium\\jdk-11\\bin'
-        ];
+            'C:\\Program Files\\Eclipse Adoptium\\jdk-11\\bin',
+            'C:\\Program Files\\Eclipse Adoptium\\jdk-11.0.30.7-hotspot\\bin'
+        ].filter(Boolean);
         for (const jp of javaPaths) {
             if (fs.existsSync(jp)) {
                 extraPaths.push(jp);
+                log(`添加 Java 到 PATH: ${jp}`);
                 break;
             }
         }
@@ -553,6 +557,39 @@ function startJavaBackend() {
     });
 }
 
+// 等待Java后端就绪
+async function waitForBackendReady(maxRetries = 30) {
+    log('等待Java后端就绪...');
+    let retries = 0;
+    while (retries < maxRetries) {
+        try {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise((resolve, reject) => {
+                const req = http.request({
+                    hostname: 'localhost',
+                    port: SERVER_PORT,
+                    path: '/api/license/status',
+                    method: 'GET',
+                    timeout: 2000
+                }, (res) => {
+                    let data = '';
+                    res.on('data', chunk => data += chunk);
+                    res.on('end', () => resolve(data));
+                });
+                req.on('error', reject);
+                req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+                req.end();
+            });
+            log('Java后端已就绪');
+            return true;
+        } catch (e) {
+            retries++;
+            log(`等待后端就绪... (${retries}/${maxRetries})`);
+        }
+    }
+    return false;
+}
+
 // 创建登录窗口
 function createLoginWindow() {
     log('创建登录窗口...');
@@ -639,8 +676,10 @@ async function handleLogin(event, credentials) {
                 if (!javaProcess || javaProcess.exitCode !== null) {
                     log('启动Java后端...');
                     await startJavaBackend();
-                    log('等待服务器就绪...');
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    const ready = await waitForBackendReady(30);
+                    if (!ready) {
+                        throw new Error('Java后端启动超时，请检查日志');
+                    }
                 } else {
                     log('Java后端已在运行，跳过启动');
                 }
@@ -920,7 +959,22 @@ async function downloadFile(url, saveDir, filename) {
     });
 }
 
-// ==================== 注册IPC处理器 ====================
+ipcMain.handle('get-app-version', () => {
+    return app.getVersion();
+});
+
+ipcMain.handle('read-logs', (event, maxLines) => {
+    try {
+        if (fs.existsSync(logFilePath)) {
+            const content = fs.readFileSync(logFilePath, 'utf8');
+            const lines = content.split('\n').filter(l => l.trim().length > 0);
+            return lines.slice(-(maxLines || 500));
+        }
+    } catch (e) {
+        log(`读取应用日志失败: ${e.message}`);
+    }
+    return [];
+});
 
 ipcMain.handle('login', handleLogin);
 
@@ -1107,37 +1161,7 @@ app.whenReady().then(async () => {
 
         await startJavaBackend();
 
-        // 等待服务就绪（最多等待30秒）
-        log('等待Java后端就绪...');
-        let retries = 0;
-        let backendReady = false;
-        while (retries < 30 && !backendReady) {
-            try {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                const testResponse = await new Promise((resolve, reject) => {
-                    const req = http.request({
-                        hostname: 'localhost',
-                        port: SERVER_PORT,
-                        path: '/api/license/status',
-                        method: 'GET',
-                        timeout: 2000
-                    }, (res) => {
-                        let data = '';
-                        res.on('data', chunk => data += chunk);
-                        res.on('end', () => resolve(data));
-                    });
-                    req.on('error', reject);
-                    req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
-                    req.end();
-                });
-                log('Java后端已就绪');
-                backendReady = true;
-            } catch (e) {
-                retries++;
-                log(`等待后端就绪... (${retries}/30)`);
-            }
-        }
-
+        const backendReady = await waitForBackendReady(30);
         if (!backendReady) {
             throw new Error('Java后端启动超时，请检查日志');
         }

@@ -1600,7 +1600,7 @@
         }
 
         function handleArchiveKeyboardNavigation(event) {
-            if (archiveSection.style.display === 'none') return;
+            if (archiveSection.style.display === 'none' || archiveSection.classList.contains('hidden')) return;
             const tagName = document.activeElement?.tagName;
             if (tagName === 'INPUT' || tagName === 'TEXTAREA') return;
             if (event.key === 'ArrowLeft') {
