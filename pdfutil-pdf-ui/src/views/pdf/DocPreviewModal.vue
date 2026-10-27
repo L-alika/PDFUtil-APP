@@ -2,17 +2,28 @@
   <transition name="modal-fade">
     <div
       v-if="docStore.previewModalOpen && doc"
-      class="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-5"
+      :class="{ 'docx-reader-overlay': fileExt === 'docx' }" class="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-5"
       @click.self="docStore.closePreviewModal"
       @keydown.esc="docStore.closePreviewModal"
       tabindex="0"
     >
       <div
         class="bg-white rounded-3xl shadow-2xl border border-canvas-border flex flex-col w-full h-[90vh] max-h-[960px] transition-all duration-300 overflow-hidden"
-        :class="isFullscreen ? 'fixed inset-0 h-full max-h-none rounded-none' : 'max-w-6xl'"
+        :class="fileExt === 'docx' ? 'docx-reader-window' : isFullscreen ? 'fixed inset-0 h-full max-h-none rounded-none' : 'max-w-6xl'"
       >
+        <header v-if="fileExt === 'docx'" class="docx-reader-header">
+          <div class="docx-file-pill" :title="docTitle"><span aria-hidden="true">▤</span><span class="docx-file-name">{{ docTitle }}</span></div>
+          <div class="docx-reader-actions">
+            <button type="button" class="docx-reader-button" title="下载原件" aria-label="下载原件" @click="docStore.downloadDoc(doc)">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m-5-5 5 5 5-5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
+            </button>
+            <button type="button" class="docx-reader-button" title="关闭预览 (Esc)" aria-label="关闭预览" @click="docStore.closePreviewModal">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" d="m6 6 12 12M6 18 18 6"/></svg>
+            </button>
+          </div>
+        </header>
         <!-- ================= MODAL HEADER ================= -->
-        <div class="px-5 py-3.5 border-b border-canvas-border/80 bg-white/95 flex items-center justify-between gap-3 shrink-0">
+        <div v-if="fileExt !== 'docx'" class="px-5 py-3.5 border-b border-canvas-border/80 bg-white/95 flex items-center justify-between gap-3 shrink-0">
           <!-- Left: Document Identity & Metadata -->
           <div class="flex items-center gap-3 min-w-0">
             <div
@@ -131,7 +142,7 @@
         </div>
 
         <!-- ================= MODAL SUB-TOOLBAR (FORMAT-AWARE) ================= -->
-        <div class="px-5 py-2.5 bg-canvas-bg/80 border-b border-canvas-border/70 flex items-center justify-between text-[12px] text-ink-secondary shrink-0">
+        <div v-if="fileExt !== 'docx'" class="px-5 py-2.5 bg-canvas-bg/80 border-b border-canvas-border/70 flex items-center justify-between text-[12px] text-ink-secondary shrink-0">
           <!-- Left Tool Controls based on format & tab -->
           <div class="flex items-center gap-3">
             <template v-if="activeTab === 'canvas'">
@@ -162,9 +173,9 @@
               <div v-else-if="fileExt === 'doc'" class="flex items-center gap-2">
                 <span class="inline-flex items-center gap-1.5 font-medium text-blue-700">
                   <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-                  Word (.doc) 结构化正文阅读器
+                  Office 文档分页预览
                 </span>
-                <span class="text-[11px] text-ink-muted">97-2003 二进制格式已转译</span>
+                <span class="text-[11px] text-ink-muted">保留页面、表格与幻灯片布局</span>
               </div>
 
               <!-- TXT Tools -->
@@ -311,7 +322,7 @@
         </div>
 
         <!-- ================= MODAL BODY VIEWPORT ================= -->
-        <div class="flex-1 overflow-y-auto bg-stone-100/60 p-4 sm:p-6 flex flex-col items-center min-h-0">
+        <div :class="{ 'docx-reader-canvas': fileExt === 'docx' }" class="flex-1 overflow-y-auto bg-stone-100/60 p-4 sm:p-6 flex flex-col items-center min-h-0">
 
           <!-- ================= TAB 1: ORIGINAL DOCUMENT RENDERING ================= -->
           <template v-if="activeTab === 'canvas'">
@@ -320,10 +331,7 @@
             <div v-if="fileExt === 'pdf'" class="w-full h-full flex flex-col flex-1">
               <!-- Real Backend PDF: Embed Stream -->
               <div v-if="isRealBackendDoc" class="w-full h-full flex-1 min-h-[560px]">
-                <iframe
-                  :src="pdfStreamUrl"
-                  class="w-full h-full min-h-[560px] border border-canvas-border rounded-2xl bg-white shadow-craft-md"
-                ></iframe>
+                <PdfDocumentPreview :doc-id="doc.id" @download="docStore.downloadDoc(doc)" />
               </div>
               <!-- Mock Demo PDF: Styled Paper View -->
               <div v-else class="w-full flex flex-col items-center py-4">
@@ -386,50 +394,16 @@
               <div
                 v-show="!docxLoading && !docxError"
                 ref="modalDocxContainerRef"
-                class="docx-modal-container w-full max-w-4xl bg-white rounded-2xl p-6 sm:p-10 shadow-craft-md border border-canvas-border overflow-x-auto"
+                class="docx-modal-container"
               ></div>
             </div>
 
             <!-- 3. Word .doc Preview (Legacy 97-2003 Formatted Text View) -->
-            <div v-else-if="fileExt === 'doc'" class="w-full max-w-4xl flex flex-col flex-1 py-2">
-              <div class="bg-white rounded-2xl p-6 sm:p-8 border border-canvas-border shadow-craft-md space-y-6">
-                <div class="flex items-center justify-between border-b border-canvas-border pb-4">
-                  <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 font-bold font-mono text-[12px] flex items-center justify-center border border-blue-100">
-                      DOC
-                    </div>
-                    <div>
-                      <h4 class="text-[16px] font-bold text-ink-primary">{{ docTitle }}</h4>
-                      <p class="text-[12px] text-ink-muted mt-0.5">Word 97-2003 结构化正文解析排版</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    class="px-3.5 py-1.5 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-600 text-[12px] font-medium border border-brand-100 transition-craft cursor-pointer"
-                    @click="docStore.downloadDoc(doc)"
-                  >
-                    下载原件查看格式排版
-                  </button>
-                </div>
-
-                <div v-if="docLinesLoading" class="py-16 text-center text-ink-muted text-[13px]">
-                  正在解析 Word 文档正文内容...
-                </div>
-
-                <div v-else class="space-y-3 font-sans text-[13.5px] text-ink-primary leading-relaxed bg-canvas-bg/40 rounded-xl p-5 border border-canvas-border/70">
-                  <div
-                    v-for="(line, lIdx) in docLines"
-                    :key="lIdx"
-                    class="py-1 border-b border-canvas-border/40 last:border-0 flex items-start gap-3"
-                  >
-                    <span class="text-[11px] font-mono text-ink-muted select-none w-8 text-right shrink-0 pt-0.5">{{ lIdx + 1 }}</span>
-                    <div class="flex-1" v-html="highlightKeywordHtml(line, activeKeyword)"></div>
-                  </div>
-                </div>
+            <div v-else-if="['doc', 'xls', 'xlsx', 'ppt', 'pptx'].includes(fileExt)" class="w-full flex-1">
+                <PdfDocumentPreview :doc-id="doc.id" @download="docStore.downloadDoc(doc)" />
               </div>
-            </div>
 
-            <!-- 4. TXT Preview -->
+              <!-- 4. TXT Preview -->
             <div v-else-if="fileExt === 'txt'" class="w-full max-w-5xl flex flex-col flex-1 py-2">
               <div v-if="txtLoading" class="py-24 text-center text-ink-muted text-[13px]">正在加载文本文档...</div>
               <div v-else class="w-full bg-white rounded-2xl shadow-craft-md border border-canvas-border overflow-hidden flex flex-1 min-h-[460px]">
@@ -499,7 +473,7 @@
 
                 <!-- PDF -->
                 <div v-if="fileExt === 'pdf'" class="w-full flex-1 flex flex-col min-h-[500px]">
-                  <iframe v-if="isRealBackendDoc" :src="pdfStreamUrl" class="w-full flex-1 min-h-[500px] border border-canvas-border rounded-xl"></iframe>
+                  <PdfDocumentPreview v-if="isRealBackendDoc" :doc-id="doc.id" @download="docStore.downloadDoc(doc)" />
                   <div v-else class="space-y-3 p-4 bg-canvas-bg/50 rounded-xl">
                     <div v-for="(block, bIdx) in currentOcrBlocks" :key="bIdx" class="p-2.5 bg-white rounded-lg border border-canvas-border text-[13px]">
                       {{ block.text }}
@@ -515,12 +489,9 @@
                 </div>
 
                 <!-- Word .doc -->
-                <div v-else-if="fileExt === 'doc'" class="w-full flex-1 flex flex-col">
-                  <div class="space-y-2 text-[13px] text-ink-primary p-2">
-                    <div v-for="(line, lIdx) in docLines" :key="lIdx" class="py-1.5 border-b border-canvas-border/40 last:border-0 leading-relaxed font-sans" v-html="highlightKeywordHtml(line, activeKeyword)"></div>
-                  </div>
+                <div v-else-if="['doc', 'xls', 'xlsx', 'ppt', 'pptx'].includes(fileExt)" class="w-full flex-1">
+                  <PdfDocumentPreview :doc-id="doc.id" @download="docStore.downloadDoc(doc)" />
                 </div>
-
                 <!-- TXT -->
                 <div v-else-if="fileExt === 'txt'" class="w-full flex-1 flex flex-col">
                   <pre class="font-mono text-[12px] p-4 bg-canvas-bg rounded-xl overflow-auto leading-relaxed" v-html="highlightKeywordHtml(txtRaw, activeKeyword)"></pre>
@@ -743,14 +714,20 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useDocStore, parseStructuredOcrBlocks } from '@/stores/doc'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
-import { renderAsync } from 'docx-preview'
+import PdfDocumentPreview from '@/components/PdfDocumentPreview.vue'
+import { renderDocx, disposeDocx } from '@/utils/renderDocx'
 import { marked } from 'marked'
 
 const docStore = useDocStore()
+const handlePreviewKeydown = (event) => {
+  if (event.key === 'Escape' && docStore.previewModalOpen) docStore.closePreviewModal()
+}
+onMounted(() => window.addEventListener('keydown', handlePreviewKeydown))
+onUnmounted(() => window.removeEventListener('keydown', handlePreviewKeydown))
 
 const doc = computed(() => docStore.previewModalDoc)
 const isFullscreen = ref(false)
@@ -763,7 +740,9 @@ const activeKeyword = ref('')
 
 // Docx state
 const modalDocxContainerRef = ref(null)
+watch(modalDocxContainerRef, (_, previous) => { if (previous) disposeDocx(previous) })
 const modalDocxSplitContainerRef = ref(null)
+watch(modalDocxSplitContainerRef, (_, previous) => { if (previous) disposeDocx(previous) })
 const docxLoading = ref(false)
 const docxError = ref('')
 
@@ -774,13 +753,7 @@ const switchModalTab = (tab) => {
       if (modalDocxSplitContainerRef.value && doc.value) {
         try {
           const resp = await axios.get(`/api/server/doc/stream-raw/${doc.value.id}`, { responseType: 'blob' })
-          await renderAsync(resp.data, modalDocxSplitContainerRef.value, null, {
-            className: 'docx-preview-content',
-            inWrapper: false,
-            ignoreWidth: false,
-            ignoreHeight: false,
-            breakPages: true
-          })
+          await renderDocx(resp.data, modalDocxSplitContainerRef.value)
         } catch (e) {
           console.warn('Docx split render exception:', e)
         }
@@ -1012,7 +985,12 @@ const copyMdContent = async () => {
 }
 
 // 格式加载分发
+let docxRequest = null
+let docxLoadId = 0
 const loadContentForModal = async () => {
+  const loadId = ++docxLoadId
+  docxRequest?.abort()
+  docxRequest = new AbortController()
   const currentDoc = doc.value
   if (!currentDoc) return
   const ext = fileExt.value
@@ -1025,65 +1003,20 @@ const loadContentForModal = async () => {
     docxError.value = ''
     try {
       if (modalDocxContainerRef.value) {
-        modalDocxContainerRef.value.innerHTML = ''
+        disposeDocx(modalDocxContainerRef.value)
+        modalDocxContainerRef.value.replaceChildren()
       }
-      const resp = await axios.get(`/api/server/doc/stream-raw/${currentDoc.id}`, { responseType: 'blob' })
+      const resp = await axios.get(`/api/server/doc/stream-raw/${currentDoc.id}`, { responseType: 'blob', signal: docxRequest.signal })
+      if (loadId !== docxLoadId) return
       if (modalDocxContainerRef.value) {
-        await renderAsync(resp.data, modalDocxContainerRef.value, null, {
-          className: 'docx-preview-content',
-          inWrapper: false,
-          ignoreWidth: false,
-          ignoreHeight: false,
-          breakPages: true
-        })
+        await renderDocx(resp.data, modalDocxContainerRef.value)
       }
     } catch (err) {
+      if (loadId !== docxLoadId || axios.isCancel(err)) return
       console.warn('Docx 渲染异常:', err)
       docxError.value = 'Word 渲染异常: ' + (err.message || '文件格式不支持')
     } finally {
-      docxLoading.value = false
-    }
-  } else if (ext === 'doc') {
-    docLinesLoading.value = true
-    docLines.value = []
-    if (currentDoc.pages && currentDoc.pages.length > 0) {
-      docLines.value = currentDoc.pages[0].map(b => b.text)
-      docLinesLoading.value = false
-    } else {
-      try {
-        const resp = await axios.get(`/api/server/doc/stream-raw/${currentDoc.id}`, { responseType: 'arraybuffer' })
-        const decoder = new TextDecoder('utf-16le', { fatal: false })
-        const rawText = decoder.decode(resp.data)
-        const rawLines = rawText.split(/[\r\n]+/)
-        const cleanList = []
-
-        const OLE_NOISE_REGEX = /WordDocument|SummaryInformation|DocumentSummaryInformation|Root Entry|WpsCustomData|Normal\.dot|userNormal|KSOProduct|TemplateDocer|commondata|eyJo|Table Paragraph|Times New Roman|宋体|仿宋|黑体|Cambria/i
-        const CHINESE_REGEX = /[\u4e00-\u9fa5]/
-        const READABLE_CHAR_REGEX = /[\u4e00-\u9fa50-9a-zA-Z，。、：；！？（）《》【】“”‘’—…、□■／/·%\-+=\s]/
-
-        for (const rawLine of rawLines) {
-          const line = rawLine.replace(/[\x00-\x1f\x7f-\x9f]/g, '').trim()
-          if (line.length < 2) continue
-          if (OLE_NOISE_REGEX.test(line)) continue
-
-          let readableCount = 0
-          for (let i = 0; i < line.length; i++) {
-            if (READABLE_CHAR_REGEX.test(line[i])) {
-              readableCount++
-            }
-          }
-          const ratio = readableCount / line.length
-          if (CHINESE_REGEX.test(line) && ratio >= 0.70) {
-            cleanList.push(line)
-          }
-        }
-
-        docLines.value = cleanList.length > 0 ? cleanList : ['（该文档暂未提取到可读文本）']
-      } catch (err) {
-        docLines.value = ['文档正文读取异常: ' + err.message]
-      } finally {
-        docLinesLoading.value = false
-      }
+      if (loadId === docxLoadId) docxLoading.value = false
     }
   } else if (ext === 'txt') {
     txtLoading.value = true
@@ -1112,6 +1045,7 @@ watch(
   () => [docStore.previewModalOpen, docStore.previewModalDoc?.id],
   ([isOpen, docId]) => {
     if (isOpen && docId) {
+      if (fileExt.value === 'docx') activeTab.value = 'canvas'
       nextTick(() => {
         loadContentForModal()
       })
@@ -1133,21 +1067,29 @@ watch(
   transform: scale(0.97);
 }
 
-.docx-modal-container :deep(.docx-preview-content) {
-  background: white !important;
-  color: #1c1917 !important;
-  box-shadow: none !important;
-}
-
-.docx-modal-container :deep(table) {
-  border-collapse: collapse !important;
-  width: 100% !important;
-}
-
-.docx-modal-container :deep(td),
-.docx-modal-container :deep(th) {
-  border: 1px solid #e7e5e4 !important;
-  padding: 6px 10px !important;
+.docx-reader-overlay { padding: 0; background: #f7f7f7; backdrop-filter: none; }
+.docx-reader-window { width: 100%; height: 100dvh; max-height: none; max-width: none; border: 0; border-radius: 0; background: #f7f7f7; }
+.docx-reader-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px; flex-shrink: 0; }
+.docx-file-pill, .docx-reader-button, .docx-zoom-select { border: 1px solid #e5e5e5; background: #fff; color: #242424; border-radius: 999px; box-shadow: 0 3px 14px #00000005; }
+.docx-file-pill { display: flex; align-items: center; gap: 12px; padding: 12px 18px; min-width: 0; max-width: 45%; font-size: 16px; }
+.docx-file-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.docx-reader-actions { display: flex; align-items: center; gap: 10px; }
+.docx-reader-button { display: grid; place-items: center; width: 48px; height: 48px; cursor: pointer; }
+.docx-reader-button:hover { background: #ededed; }
+.docx-zoom-select { padding: 12px 16px; font-size: 16px; cursor: pointer; }
+.docx-reader-button:focus-visible, .docx-zoom-select:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
+.docx-reader-canvas { background: #f7f7f7; padding: 48px 24px 80px; align-items: stretch; overflow: auto; }
+.docx-reader-canvas > div { min-width: 0; }
+.docx-modal-container { flex-shrink: 0; width: 100%; margin: 0 auto; }
+.docx-modal-container :deep(.docx-preview-content-wrapper) { background: transparent; padding: 0; }
+.docx-modal-container :deep(section.docx-preview-content) { background: white; margin: 0 auto 28px; border: 1px solid #dedede; box-shadow: 0 5px 24px #0000000a; }
+@media (max-width: 640px) {
+  .docx-reader-header { padding: 10px; gap: 8px; }
+  .docx-file-pill { max-width: 42%; padding: 10px; gap: 6px; font-size: 13px; }
+  .docx-reader-actions { gap: 6px; }
+  .docx-reader-button { width: 38px; height: 38px; }
+  .docx-zoom-select { padding: 9px 6px; font-size: 13px; }
+  .docx-reader-canvas { padding: 24px 12px 48px; }
 }
 
 .markdown-body :deep(h1),

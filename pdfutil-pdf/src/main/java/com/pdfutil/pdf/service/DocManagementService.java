@@ -62,6 +62,9 @@ public class DocManagementService {
     @Autowired
     private EsSearchService esSearchService;
 
+    @Autowired
+    private OfficePreviewService officePreviewService;
+
     /** 异步任务调度线程池（隔离控制，默认最大并发数4，防止算力雪崩） */
     private final ExecutorService workerPool = new ThreadPoolExecutor(
             2, 4, 60L, TimeUnit.SECONDS,
@@ -167,6 +170,33 @@ public class DocManagementService {
     /**
      * 提交任务到后台 Worker 队列
      */
+    public synchronized void preparePreview(String docId) throws IOException {
+        DocInfo doc = docInfoDao.findById(docId);
+        if (doc == null) throw new IOException("文档不存在");
+        if (!OfficePreviewService.supports(doc.getFileExt()) && !"pdf".equalsIgnoreCase(doc.getFileExt()))
+            throw new IOException("此格式暂不支持 PDF 预览");
+        if ("WAITING".equals(doc.getStatus()) || "PROCESSING".equals(doc.getStatus())) return;
+        DocTask task = new DocTask();
+        task.setTaskId(UUID.randomUUID().toString().replace("-", ""));
+        task.setDocId(docId);
+        task.setTaskType("CONVERT_AND_INDEX");
+        task.setStatus("WAITING");
+        task.setProgress(0);
+        doc.setStatus("WAITING");
+        docInfoDao.update(doc);
+        docTaskDao.insert(task);
+        try {
+            submitTask(task.getTaskId());
+        } catch (RejectedExecutionException ex) {
+            doc.setStatus("FAILED");
+            docInfoDao.update(doc);
+            task.setStatus("FAILED");
+            task.setErrorMsg("预览任务队列已满，请稍后重试");
+            docTaskDao.update(task);
+            throw new IOException("预览任务队列已满，请稍后重试", ex);
+        }
+    }
+
     public void submitTask(String taskId) {
         workerPool.submit(() -> processTask(taskId));
     }
@@ -197,6 +227,7 @@ public class DocManagementService {
         docInfoDao.update(doc);
 
         File downloadedRaw = null;
+        File convertedPreview = null;
         try {
             // 下载原始文件流到临时目录进行处理
             downloadedRaw = File.createTempFile("process_" + doc.getId() + "_", "." + doc.getFileExt());
@@ -208,12 +239,21 @@ public class DocManagementService {
                 org.apache.commons.io.FileUtils.copyInputStreamToFile(stream, downloadedRaw);
             }
 
+            if (downloadedRaw.length() == 0) throw new IOException("原始文件不存在或为空");
+            File previewSource = null;
+            if ("pdf".equalsIgnoreCase(doc.getFileExt())) {
+                previewSource = downloadedRaw;
+            } else if (OfficePreviewService.supports(doc.getFileExt())) {
+                convertedPreview = officePreviewService.convert(downloadedRaw, doc.getFileExt());
+                previewSource = convertedPreview;
+            }
+
             List<DocPage> docPages = new ArrayList<>();
             int totalPages = 0;
 
             // 智能分流解析：如果是 PDF
-            if ("pdf".equalsIgnoreCase(doc.getFileExt()) && downloadedRaw.exists() && downloadedRaw.length() > 0) {
-                try (PDDocument pdDocument = PDDocument.load(downloadedRaw)) {
+            if (previewSource != null) {
+                try (PDDocument pdDocument = PDDocument.load(previewSource)) {
                     totalPages = pdDocument.getNumberOfPages();
                     PDFTextStripper stripper = new PDFTextStripper();
                     PDFRenderer renderer = new PDFRenderer(pdDocument);
@@ -276,21 +316,10 @@ public class DocManagementService {
                 pageRecord.setIsOcr(false);
                 pageRecord.setCharCount(text.length());
                 docPages.add(pageRecord);
-            } else if ("doc".equalsIgnoreCase(doc.getFileExt()) && downloadedRaw != null && downloadedRaw.exists()) {
-                byte[] bytes = org.apache.commons.io.FileUtils.readFileToByteArray(downloadedRaw);
-                List<String> cleanLines = extractCleanDocLines(bytes);
-                String docText = String.join("\n", cleanLines);
-                totalPages = 1;
-                DocPage pageRecord = new DocPage();
-                pageRecord.setDocId(doc.getId());
-                pageRecord.setPageNum(1);
-                pageRecord.setTextContent(docText);
-                pageRecord.setIsOcr(false);
-                pageRecord.setCharCount(docText.length());
-                docPages.add(pageRecord);
             }
 
             // 保存到分页表 / 本地缓存
+            docPageDao.deleteByDocId(doc.getId());
             docPageDao.batchInsert(docPages);
 
             // 批量同步索引至 Elasticsearch
@@ -301,11 +330,11 @@ public class DocManagementService {
             }
 
             // 如果原本是 PDF，直接复用原件为预览件；若是其他类型，则上传转换好的双层件
-            if ("pdf".equalsIgnoreCase(doc.getFileExt()) && downloadedRaw.exists() && downloadedRaw.length() > 0) {
-                minioStorageService.uploadFile(
+            if (previewSource != null) {
+                if (!minioStorageService.uploadFile(
                         minioStorageService.getMinioProperties().getBucketPreview(),
-                        doc.getPreviewPdfPath(), downloadedRaw, "application/pdf"
-                );
+                        doc.getPreviewPdfPath(), previewSource, "application/pdf"
+                )) throw new IOException("预览 PDF 保存失败");
             }
 
             // 更新文档与任务状态为成功
@@ -330,6 +359,7 @@ public class DocManagementService {
             doc.setStatus("FAILED");
             docInfoDao.update(doc);
         } finally {
+            if (convertedPreview != null) convertedPreview.delete();
             if (downloadedRaw != null && downloadedRaw.exists() && !downloadedRaw.delete()) {
                 log.debug("清理下载临时文件: {}", downloadedRaw.getName());
             }

@@ -192,6 +192,16 @@ public class DocManagementController extends BaseController {
     /**
      * 获取 PDF.js 在线安全流式预览 URL
      */
+    @PostMapping("/prepare-preview/{docId}")
+    public AjaxResult preparePreview(@PathVariable("docId") String docId) {
+        try {
+            docManagementService.preparePreview(docId);
+            return AjaxResult.success("预览任务已提交");
+        } catch (Exception ex) {
+            return AjaxResult.error(ex.getMessage());
+        }
+    }
+
     @GetMapping("/preview-url/{docId}")
     public AjaxResult getPreviewUrl(@PathVariable("docId") String docId) {
         String previewUrl = docManagementService.getPreviewUrl(docId);
@@ -231,7 +241,7 @@ public class DocManagementController extends BaseController {
                 minioStorageService.getMinioProperties().getBucketPreview(),
                 doc.getPreviewPdfPath()
         );
-        if (is == null) {
+        if (is == null && "pdf".equalsIgnoreCase(doc.getFileExt())) {
             is = minioStorageService.getObjectStream(
                     minioStorageService.getMinioProperties().getBucketRaw(),
                     doc.getRawStoragePath()

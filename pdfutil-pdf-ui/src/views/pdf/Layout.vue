@@ -506,10 +506,7 @@
               <template v-else-if="docStore.previewTab === 'canvas'">
                 <!-- 1.1 PDF 原件流式内嵌预览 -->
                 <div v-if="currentDocExt === 'pdf'" class="w-full h-full flex flex-col flex-1 min-h-[520px]">
-                  <iframe
-                    :src="pdfStreamUrl"
-                    class="w-full flex-1 h-full min-h-[520px] border border-canvas-border rounded-xl bg-white shadow-craft-sm"
-                  ></iframe>
+                  <PdfDocumentPreview :doc-id="docStore.selectedDoc.id" @download="docStore.downloadDoc(docStore.selectedDoc)" />
                 </div>
 
                 <!-- 1.2 Word .docx 纯前端高保真排版预览 (基于 docx-preview) -->
@@ -525,48 +522,15 @@
                     <p class="text-[13px] text-ink-muted">{{ docxError }}</p>
                     <button type="button" class="px-3.5 py-1.5 rounded-lg bg-brand-500 text-white text-[12px] font-medium cursor-pointer" @click="docStore.downloadDoc(docStore.selectedDoc)">下载原件查看</button>
                   </div>
-                  <div ref="docxContainerRef" class="docx-render-container w-full bg-white rounded-xl p-4 shadow-paper border border-canvas-border overflow-x-auto"></div>
+                  <div ref="docxContainerRef" class="docx-render-container w-full overflow-x-auto"></div>
                 </div>
 
                 <!-- 1.3 Word .doc (老格式 97-2003) 友好卡片与正文阅读 -->
-                <div v-else-if="currentDocExt === 'doc'" class="w-full p-5 bg-white rounded-2xl border border-canvas-border shadow-craft-sm space-y-4">
-                  <div class="flex items-center justify-between gap-3 border-b border-canvas-border/70 pb-3">
-                    <div class="flex items-center gap-2.5 min-w-0">
-                      <div class="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 font-mono font-bold text-[12px] flex items-center justify-center shrink-0">
-                        DOC
-                      </div>
-                      <div class="min-w-0">
-                        <h4 class="font-bold text-[13.5px] text-ink-primary truncate" :title="docStore.selectedDoc.fileName || docStore.selectedDoc.name">{{ docStore.selectedDoc.fileName || docStore.selectedDoc.name }}</h4>
-                        <p class="text-[11.5px] text-ink-muted mt-0.5">Word 97-2003 结构化正文已转译</p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      class="px-2.5 py-1 rounded-lg bg-brand-50 hover:bg-brand-100 text-brand-600 text-[11px] font-medium border border-brand-100 transition-craft cursor-pointer shrink-0"
-                      @click="openModalPreview(docStore.selectedDoc)"
-                    >
-                      大窗阅读
-                    </button>
-                  </div>
+                <div v-else-if="['doc', 'xls', 'xlsx', 'ppt', 'pptx'].includes(currentDocExt)" class="w-full flex-1">
+                <PdfDocumentPreview :doc-id="docStore.selectedDoc.id" @download="docStore.downloadDoc(docStore.selectedDoc)" />
+              </div>
 
-                  <div v-if="docLinesLoading" class="py-8 text-center text-ink-muted text-[12px]">
-                    正在提取正文段落...
-                  </div>
-                  <div v-else class="space-y-2 text-[12.5px] text-ink-primary bg-canvas-bg/50 p-3 rounded-xl border border-canvas-border/60 max-h-[360px] overflow-y-auto">
-                    <div
-                      v-for="(line, lIdx) in docLines"
-                      :key="lIdx"
-                      class="py-1 border-b border-canvas-border/40 last:border-0 leading-relaxed"
-                      v-html="highlightKeywordHtml(line, docStore.activeHighlightKeyword)"
-                    ></div>
-                  </div>
-                  <div class="flex items-center justify-between pt-1 text-[11.5px]">
-                    <span class="text-ink-muted">已建立 OCR 全文检索索引</span>
-                    <button type="button" class="text-brand-600 hover:underline cursor-pointer" @click="docStore.downloadDoc(docStore.selectedDoc)">下载原件</button>
-                  </div>
-                </div>
-
-                <!-- 1.4 TXT 文本原生阅读器 (带行号与关键词高亮) -->
+              <!-- 1.4 TXT 文本原生阅读器 (带行号与关键词高亮) -->
                 <div v-else-if="currentDocExt === 'txt'" class="w-full flex flex-col flex-1">
                   <div v-if="txtLoading" class="py-16 text-center text-ink-muted text-[13px]">加载文本内容...</div>
                   <div v-else class="w-full bg-white rounded-xl shadow-craft-sm border border-canvas-border overflow-hidden flex text-[13px]">
@@ -1005,7 +969,8 @@ import { ElMessage } from 'element-plus'
 import { useDocStore, parseStructuredOcrBlocks } from '@/stores/doc'
 import { uploadServerDoc } from '@/api/doc'
 import axios from 'axios'
-import { renderAsync } from 'docx-preview'
+import PdfDocumentPreview from '@/components/PdfDocumentPreview.vue'
+import { renderDocx, disposeDocx } from '@/utils/renderDocx'
 import { marked } from 'marked'
 import DocPreviewModal from './DocPreviewModal.vue'
 
@@ -1254,6 +1219,7 @@ const copyOcrText = async () => {
 // 多格式文件原件预览引擎状态与分流
 const isPreviewExpanded = ref(false)
 const docxContainerRef = ref(null)
+watch(docxContainerRef, (_, previous) => { if (previous) disposeDocx(previous) })
 const docxLoading = ref(false)
 const docxError = ref('')
 
@@ -1332,7 +1298,12 @@ const openModalPreview = (doc, pageIndex = 0, keyword = '') => {
   }
 }
 
+let docxRequest = null
+let docxLoadId = 0
 const loadCurrentFileContent = async () => {
+  const loadId = ++docxLoadId
+  docxRequest?.abort()
+  docxRequest = new AbortController()
   const doc = docStore.selectedDoc
   if (!doc) return
   const ext = currentDocExt.value
@@ -1342,60 +1313,20 @@ const loadCurrentFileContent = async () => {
     docxError.value = ''
     try {
       if (docxContainerRef.value) {
-        docxContainerRef.value.innerHTML = ''
+        disposeDocx(docxContainerRef.value)
+        docxContainerRef.value.replaceChildren()
       }
-      const resp = await axios.get(`/api/server/doc/stream-raw/${doc.id}`, { responseType: 'blob' })
+      const resp = await axios.get(`/api/server/doc/stream-raw/${doc.id}`, { responseType: 'blob', signal: docxRequest.signal })
+      if (loadId !== docxLoadId) return
       if (docxContainerRef.value) {
-        await renderAsync(resp.data, docxContainerRef.value, null, {
-          className: 'docx-preview-content',
-          inWrapper: false,
-          ignoreWidth: false,
-          ignoreHeight: false,
-          breakPages: true
-        })
+        await renderDocx(resp.data, docxContainerRef.value)
       }
     } catch (err) {
+      if (loadId !== docxLoadId || axios.isCancel(err)) return
       console.warn('Docx 渲染异常:', err)
       docxError.value = 'Word 渲染异常: ' + (err.message || '文件格式不支持')
     } finally {
-      docxLoading.value = false
-    }
-  } else if (ext === 'doc') {
-    docLinesLoading.value = true
-    docLines.value = []
-    try {
-      const resp = await axios.get(`/api/server/doc/stream-raw/${doc.id}`, { responseType: 'arraybuffer' })
-      const decoder = new TextDecoder('utf-16le', { fatal: false })
-      const rawText = decoder.decode(resp.data)
-      const rawLines = rawText.split(/[\r\n]+/)
-      const cleanList = []
-
-      const OLE_NOISE_REGEX = /WordDocument|SummaryInformation|DocumentSummaryInformation|Root Entry|WpsCustomData|Normal\.dot|userNormal|KSOProduct|TemplateDocer|commondata|eyJo|Table Paragraph|Times New Roman|宋体|仿宋|黑体|Cambria/i
-      const CHINESE_REGEX = /[\u4e00-\u9fa5]/
-      const READABLE_CHAR_REGEX = /[\u4e00-\u9fa50-9a-zA-Z，。、：；！？（）《》【】“”‘’—…、□■／/·%\-+=\s]/
-
-      for (const rawLine of rawLines) {
-        const line = rawLine.replace(/[\x00-\x1f\x7f-\x9f]/g, '').trim()
-        if (line.length < 2) continue
-        if (OLE_NOISE_REGEX.test(line)) continue
-
-        let readableCount = 0
-        for (let i = 0; i < line.length; i++) {
-          if (READABLE_CHAR_REGEX.test(line[i])) {
-            readableCount++
-          }
-        }
-        const ratio = readableCount / line.length
-        if (CHINESE_REGEX.test(line) && ratio >= 0.70) {
-          cleanList.push(line)
-        }
-      }
-
-      docLines.value = cleanList.length > 0 ? cleanList : ['（该文档暂未提取到可读文本）']
-    } catch (err) {
-      docLines.value = ['文档正文读取异常: ' + err.message]
-    } finally {
-      docLinesLoading.value = false
+      if (loadId === docxLoadId) docxLoading.value = false
     }
   } else if (ext === 'txt') {
     txtLoading.value = true
@@ -1518,6 +1449,14 @@ const handleConfirmDelete = async () => {
 <style scoped>
 :deep(.docx-render-container) {
   min-height: 480px;
+  padding: 20px 12px;
+  background: #f7f7f7;
+}
+.docx-render-container :deep(section.docx-preview-content) {
+  margin: 0 auto 24px;
+  background: white;
+  border: 1px solid #dedede;
+  box-shadow: 0 5px 24px #0000000a;
 }
 :deep(.docx-wrapper) {
   background: transparent !important;
